@@ -297,6 +297,12 @@ static void msm_restart_prepare(const char *cmd)
 #ifdef CONFIG_MACH_MSM8998_ONEPLUS5
 	/* To preserve console-ramoops */
 	need_warm_reset = true;
+
+	/* Perform a regular reboot upon panic or unspecified command */
+	if (in_panic || !cmd) {
+		__raw_writel(0x77665501, restart_reason);
+		cmd = NULL;
+	}
 #endif
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
