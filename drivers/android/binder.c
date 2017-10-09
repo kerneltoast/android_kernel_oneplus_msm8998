@@ -480,6 +480,7 @@ static inline void binder_lock(struct binder_context *context, const char *tag)
 	trace_binder_lock(tag);
 	mutex_lock(&context->binder_main_lock);
 	preempt_disable();
+	set_long_preempt_disable_hint(true);
 	trace_binder_locked(tag);
 }
 
@@ -487,6 +488,7 @@ static inline void binder_unlock(struct binder_context *context,
 				 const char *tag)
 {
 	trace_binder_unlock(tag);
+	set_long_preempt_disable_hint(false);
 	mutex_unlock(&context->binder_main_lock);
 	preempt_enable();
 }
@@ -3806,6 +3808,7 @@ static void binder_deferred_func(struct work_struct *work)
 
 	int defer;
 
+	set_long_preempt_disable_hint(true);
 	do {
 		trace_binder_lock(__func__);
 		mutex_lock(&context->binder_main_lock);
@@ -3844,6 +3847,7 @@ static void binder_deferred_func(struct work_struct *work)
 		if (files)
 			put_files_struct(files);
 	} while (proc);
+	set_long_preempt_disable_hint(false);
 }
 
 static void
