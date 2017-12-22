@@ -184,4 +184,9 @@ config ARCH_ZYNQMP
 	help
 	  This enables support for Xilinx ZynqMP Family
 
+config MACH_MSM8998_ONEPLUS5
+	bool "OnePlus 5(T)"
+	help
+	  Support for the OnePlus 5(T)
+
 endmenu
