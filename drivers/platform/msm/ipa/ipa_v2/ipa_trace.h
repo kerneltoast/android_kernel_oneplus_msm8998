@@ -12,6 +12,9 @@
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM ipa
+#undef TRACE_INCLUDE_PATH
+#define TRACE_INCLUDE_PATH ../../drivers/platform/msm/ipa/ipa_v2
+#undef TRACE_INCLUDE_FILE
 #define TRACE_INCLUDE_FILE ipa_trace
 
 #if !defined(_IPA_TRACE_H) || defined(TRACE_HEADER_MULTI_READ)
@@ -147,6 +150,4 @@ TRACE_EVENT(
 #endif /* _IPA_TRACE_H */
 
 /* This part must be outside protection */
-#undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH .
 #include <trace/define_trace.h>
