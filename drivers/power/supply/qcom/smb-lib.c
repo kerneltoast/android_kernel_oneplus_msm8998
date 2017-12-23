@@ -1941,55 +1941,6 @@ int smblib_set_prop_input_suspend(struct smb_charger *chg,
 #define POWER_ROLE_BIT (DFP_EN_CMD_BIT | UFP_EN_CMD_BIT)
 static int op_check_battery_temp(struct smb_charger *chg);
 
-int op_set_prop_otg_switch(struct smb_charger *chg,
-				  const union power_supply_propval *val)
-{
-	int rc = 0;
-	u8 power_role;
-	u8 ctrl = 0;
-	bool pre_otg_switch;
-	int i = 0;
-
-	pre_otg_switch = chg->otg_switch;
-	chg->otg_switch = val->intval;
-
-	if (chg->otg_switch == pre_otg_switch)
-		return rc;
-
-	pr_info("set otg_switch=%d\n", chg->otg_switch);
-	if (chg->otg_switch)
-		power_role = 0;
-	else
-		power_role = UFP_EN_CMD_BIT;
-
-	for (i = 0; i < 10; i++) {
-		rc = smblib_masked_write(chg,
-					TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
-					TYPEC_POWER_ROLE_CMD_MASK, power_role);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't write 0x%02x to 0x1368 rc=%d\n",
-				power_role, rc);
-			return rc;
-		}
-		usleep_range(30000, 31000);
-		ctrl = 0;
-		rc = smblib_read(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG, &ctrl);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't read err=%d\n", rc);
-			return rc;
-		}
-		if ((power_role == 0) && ((ctrl & POWER_ROLE_BIT) == 0))
-			break;
-		if ((power_role == UFP_EN_CMD_BIT) && (ctrl | UFP_EN_CMD_BIT))
-			break;
-	}
-	pr_info("retry time = %d,ctrl = %d\n", i,ctrl);
-	if (i == 10)
-		pr_err("retry time over\n");
-
-	return rc;
-}
-
 int smblib_set_prop_chg_voltage(struct smb_charger *chg,
 				  const union power_supply_propval *val)
 {
@@ -2701,8 +2652,6 @@ int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 		return -EINVAL;
 	}
 
-	if (!chg->otg_switch)
-		power_role = UFP_EN_CMD_BIT;
 	if (power_role == UFP_EN_CMD_BIT) {
 		/* disable PBS workaround when forcing sink mode */
 		rc = smblib_write(chg, TM_IO_DTEST4_SEL, 0x0);
@@ -4143,7 +4092,7 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 		/* enable DRP */
 	rc = smblib_masked_write(chg,
 		TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
-		TYPEC_POWER_ROLE_CMD_MASK, chg->otg_switch? 0 : UFP_EN_CMD_BIT);
+		TYPEC_POWER_ROLE_CMD_MASK, 0);
 
 	if (rc < 0)
 		smblib_err(chg, "Couldn't enable DRP rc=%d\n", rc);
