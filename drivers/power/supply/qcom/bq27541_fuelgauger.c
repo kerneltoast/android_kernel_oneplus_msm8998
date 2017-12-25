@@ -435,9 +435,6 @@ static int bq27541_average_current(struct bq27541_device_info *di);
 extern int get_charging_status(void);
 extern int fuelgauge_battery_temp_region_get(void);
 extern bool get_oem_charge_done_status(void);
-extern int load_soc(void);
-extern void backup_soc_ex(int soc);
-extern void clean_backup_soc_ex(void);
 
 static int get_current_time(unsigned long *now_tm_sec)
 {
@@ -472,17 +469,6 @@ close_time:
 	return rc;
 }
 
-int get_prop_pre_shutdown_soc(void)
-{
-	int soc_load;
-
-	soc_load = load_soc();
-	if (soc_load == -1)
-		return 50;
-	else
-		return soc_load;
-}
-
 static int fg_soc_calibrate(struct  bq27541_device_info *di, int soc)
 {
 	union power_supply_propval ret = {0,};
@@ -491,30 +477,13 @@ static int fg_soc_calibrate(struct  bq27541_device_info *di, int soc)
 	static bool first_enter = false;
 	static int charging_status, charging_status_pre = 0;
 	bool chg_done;
-	int temp_region, vbat_mv, ibat_ma, soc_load, soc_temp, counter_temp = 0;
+	int temp_region, vbat_mv, ibat_ma, soc_temp, counter_temp = 0;
 
 	if (false == first_enter) {
 		di->batt_psy = power_supply_get_by_name("battery");
 		if (di->batt_psy) {
 			first_enter = true;
-			soc_load = load_soc();
-			pr_info("soc=%d, soc_load=%d\n", soc, soc_load);
-			if (soc_load == -1) {
-				/* get last soc error */
-				di->soc_pre = soc;
-			} else if (soc_load > 0 && soc_load < 100) {
-				if (soc_load > soc)
-					di->soc_pre = soc_load - 1;
-				else
-					di->soc_pre = soc_load;
-			} else if (soc_load == 100
-					&& abs(soc_load - soc) > TEN_PERCENT) {
-				/* decrease soc when gap between soc_load and */
-				/* real_soc is over 10%                       */
-				di->soc_pre = soc_load - 1;
-			} else {
-				di->soc_pre = soc_load;
-			}
+			di->soc_pre = soc;
 
 			if (!di->batt_psy) {
 				pr_err("batt_psy is absent, soc_pre=%d\n", di->soc_pre);
@@ -522,7 +491,6 @@ static int fg_soc_calibrate(struct  bq27541_device_info *di, int soc)
 			}
 			/* store the soc when boot first time */
 			get_current_time(&di->soc_pre_time);
-			clean_backup_soc_ex();
 		} else {
 			return soc;
 		}
@@ -1881,9 +1849,6 @@ static void bq27541_shutdown(struct i2c_client *client)
 		if (di->already_modify_smooth)
 			bq27411_modify_soc_smooth_parameter(bq27541_di, false);
 	}
-
-	if (di->soc_pre != DEFAULT_INVALID_SOC_PRE)
-		backup_soc_ex(di->soc_pre);
 }
 
 static const struct of_device_id bq27541_match[] = {
