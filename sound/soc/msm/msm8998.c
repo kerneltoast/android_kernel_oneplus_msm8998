@@ -515,7 +515,7 @@ static int msm_snd_enable_codec_ext_clk(struct snd_soc_codec *codec,
 					int enable, bool dapm);
 static int msm_wsa881x_init(struct snd_soc_component *component);
 
-int op_project_17801;
+static bool op_project_17801;
 
 /*
  * Need to report LINEIN
@@ -3725,6 +3725,13 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		pdata->codec_root = entry;
 		tavil_codec_info_create_codec_entry(pdata->codec_root, codec);
 	} else {
+		if (rtd->card->num_aux_devs && rtd_aux && rtd_aux->component)
+			if (!strcmp(rtd_aux->component->name, WSA8810_NAME_1) ||
+			    !strcmp(rtd_aux->component->name, WSA8810_NAME_2)) {
+				tasha_set_spkr_mode(rtd->codec, SPKR_MODE_1);
+				tasha_set_spkr_gain_offset(rtd->codec,
+							RX_GAIN_OFFSET_M1P5_DB);
+		}
 		card = rtd->card->snd_card;
 		entry = snd_register_module_info(card->module, "codecs",
 						 card->proc_root);
@@ -3768,8 +3775,7 @@ static void *def_tasha_mbhc_cal(void)
 		return NULL;
 
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(tasha_wcd_cal)->X) = (Y))
-    S(v_hs_max, 1700);
-
+	S(v_hs_max, 1700);
 #undef S
 #define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(tasha_wcd_cal)->X) = (Y))
 	S(num_btn, WCD_MBHC_DEF_BUTTONS);
@@ -3778,6 +3784,7 @@ static void *def_tasha_mbhc_cal(void)
 	btn_cfg = WCD_MBHC_CAL_BTN_DET_PTR(tasha_wcd_cal);
 	btn_high = ((void *)&btn_cfg->_v_btn_low) +
 		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
+
 	btn_high[0] = 75;
 	btn_high[1] = 240;
 	btn_high[2] = 450;
@@ -4239,11 +4246,8 @@ static int msm_set_pinctrl(struct msm_pinctrl_info *pinctrl_info,
 		goto err;
 	}
 
-	if (pinctrl_info->pinctrl == NULL) {
-		//pr_err("%s: pinctrl_info->pinctrl is NULL\n", __func__);
-		//ret = -EINVAL;
+	if (!pinctrl_info->pinctrl)
 		goto err;
-	}
 
 	curr_state = pinctrl_info->curr_state;
 	pinctrl_info->curr_state = new_state;
@@ -6175,6 +6179,39 @@ static struct snd_soc_dai_link msm_wcn_be_dai_links[] = {
 	},
 };
 
+static struct snd_soc_dai_link ext_disp_be_dai_link[] = {
+	/* HDMI BACK END DAI Link */
+	{
+		.name = LPASS_BE_HDMI,
+		.stream_name = "HDMI Playback",
+		.cpu_dai_name = "msm-dai-q6-hdmi.8",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-ext-disp-audio-codec-rx",
+		.codec_dai_name = "msm_hdmi_audio_codec_rx_dai",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_HDMI_RX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
+	/* DISP PORT BACK END DAI Link */
+	{
+		.name = LPASS_BE_DISPLAY_PORT,
+		.stream_name = "Display Port Playback",
+		.cpu_dai_name = "msm-dai-q6-dp.24608",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-ext-disp-audio-codec-rx",
+		.codec_dai_name = "msm_dp_audio_codec_rx_dai",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_DISPLAY_PORT_RX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
+};
+
 static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 	{
 		.name = LPASS_BE_PRI_MI2S_RX,
@@ -6268,8 +6305,8 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "tfa98xx.9-0036",//tfa98xx.9-0036
-		.codec_dai_name = "tfa98xx_codec-9-36",//tfa98xx_codec-9-36
+		.codec_name = "tfa98xx.9-0036",
+		.codec_dai_name = "tfa98xx_codec-9-36",
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
@@ -6290,40 +6327,6 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-	},
-};
-
-
-static struct snd_soc_dai_link ext_disp_be_dai_link[] = {
-	/* HDMI BACK END DAI Link */
-	{
-		.name = LPASS_BE_HDMI,
-		.stream_name = "HDMI Playback",
-		.cpu_dai_name = "msm-dai-q6-hdmi.8",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-ext-disp-audio-codec-rx",
-		.codec_dai_name = "msm_hdmi_audio_codec_rx_dai",
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.be_id = MSM_BACKEND_DAI_HDMI_RX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ignore_pmdown_time = 1,
-		.ignore_suspend = 1,
-	},
-	/* DISP PORT BACK END DAI Link */
-	{
-		.name = LPASS_BE_DISPLAY_PORT,
-		.stream_name = "Display Port Playback",
-		.cpu_dai_name = "msm-dai-q6-dp.24608",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-ext-disp-audio-codec-rx",
-		.codec_dai_name = "msm_dp_audio_codec_rx_dai",
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.be_id = MSM_BACKEND_DAI_DISPLAY_PORT_RX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
 	},
 };
@@ -6688,6 +6691,7 @@ static int msm_audrx_stub_init(struct snd_soc_pcm_runtime *rtd)
 		snd_soc_dapm_new_controls(dapm, msm_dapm_widgets,
 					ARRAY_SIZE(msm_dapm_widgets));
 	}
+
 	return 0;
 }
 
@@ -7019,7 +7023,7 @@ static int msm_init_wsa_dev(struct platform_device *pdev,
 	char *dev_name_str = NULL;
 	int found = 0;
 	int ret = 0;
-    return ret;
+
 	/* Get maximum WSA device count for this platform */
 	ret = of_property_read_u32(pdev->dev.of_node,
 				   "qcom,wsa-max-devs", &wsa_max_devs);
@@ -7285,12 +7289,8 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, pdata);
 
-	ret = of_property_read_bool(card->dev->of_node, "op,project_17801");
-	if (ret)
-		op_project_17801 = 0;
-	else
-		op_project_17801 = 1;
-	pr_err("%s project name: %d", __func__, op_project_17801);
+	op_project_17801 = of_property_read_bool(card->dev->of_node,
+							"op,project_17801");
 
 	ret = snd_soc_of_parse_card_name(card, "qcom,model");
 	if (ret) {
@@ -7341,9 +7341,12 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		ret = -EPROBE_DEFER;
 		goto err;
 	}
-	ret = msm_init_wsa_dev(pdev, card);
-	if (ret)
-		goto err;
+
+	if (IS_ENABLED(CONFIG_SND_SOC_WSA881X)) {
+		ret = msm_init_wsa_dev(pdev, card);
+		if (ret)
+			goto err;
+	}
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret == -EPROBE_DEFER) {
