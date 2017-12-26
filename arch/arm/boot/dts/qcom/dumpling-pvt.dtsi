@@ -43,6 +43,7 @@
 	qcom,platform-te-gpio = <&tlmm 11 0>;
 	qcom,platform-vci-gpio = <&tlmm 21 0>;
 	qcom,platform-poc-gpio = <&tlmm 66 0>;
+	/delete-property/ qcom,panel-mode-gpio;
 	clocks = <&clock_mmss clk_mmss_mdss_byte0_clk>,
 		<&clock_mmss clk_mmss_mdss_pclk0_clk>,
 		<&clock_mmss clk_mmss_mdss_esc0_clk>,
