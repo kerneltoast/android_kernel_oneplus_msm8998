@@ -2722,7 +2722,7 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 	u8 stat;
 
 	if (chg->pd_disabled)
-		return rc;
+		return 0;
 
 	pr_info("set pd_active=%d\n", val->intval);
 	if (!get_effective_result(chg->pd_allowed_votable))
@@ -3312,34 +3312,6 @@ irqreturn_t smblib_handle_usbin_uv(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-char dump_val[2048];
-static inline void op_dump_reg(struct smb_charger *chip,
-	u16 addr_start, u16 addr_end)
-{
-	u8 reg;
-	u16 addr;
-	char reg_val[19];
-
-	memset(dump_val, 0, sizeof(dump_val));
-	for (addr = addr_start; addr <= addr_end; addr++) {
-		memset(reg_val, 0, sizeof(reg_val));
-		smblib_read(chip, addr, &reg);
-		scnprintf(reg_val,
-			sizeof(reg_val), "%x=%0x;", addr, reg);
-		strlcat(dump_val, reg_val, sizeof(dump_val));
-	}
-	 pr_info("%s\n", dump_val);
-}
-
-static void op_dump_regs(struct smb_charger *chip)
-{
-	u16 addr, count;
-
-	count = 0x80;
-	for (addr = 0x1000; addr <= 0x1700; addr += count)
-	op_dump_reg(chip, addr, (addr + count));
-}
-
 static void smblib_micro_usb_plugin(struct smb_charger *chg, bool vbus_rising)
 {
 	if (vbus_rising) {
@@ -3508,7 +3480,6 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 				if (vbus_val.intval > 3000) {
 					pr_err("unplg,Vbus=%d",
 						vbus_val.intval);
-					op_dump_regs(chg);
 				}
 			}
 		}
@@ -3825,7 +3796,7 @@ int op_rerun_apsd(struct smb_charger *chg)
 }
 static void smblib_handle_apsd_done(struct smb_charger *chg, bool rising)
 {
-	int temp_region,current_limit_ua;
+	int temp_region,current_limit_ua = 0;
 	const struct apsd_result *apsd_result;
 
 	if (!rising)
@@ -5187,7 +5158,6 @@ static void op_chek_apsd_done_work(struct work_struct *work)
 	if (chg->ck_apsd_count >= APSD_CHECK_COUTNT) {
 		pr_info("apsd done error\n");
 		chg->ck_apsd_count = 0;
-		op_dump_regs(chg);
 		op_rerun_apsd(chg);
 	} else {
 		chg->ck_apsd_count++;
@@ -5899,7 +5869,7 @@ int op_get_charg_en(struct smb_charger *chg, int *chg_enabled)
 static void op_check_charger_collapse(struct smb_charger *chg)
 {
 	int rc, is_usb_supend, curr, chg_en;
-	u8 stat, chger_stat, pwer_source_stats;
+	u8 stat, chger_stat = 0, pwer_source_stats = 0;
 
 	if (!chg->vbus_present)
 		return;
@@ -6320,7 +6290,6 @@ static void op_heartbeat_work(struct work_struct *work)
 	if (chg->dump_count == 600) {
 		chg->dump_count = 0;
 		if ((get_prop_batt_current_now(chg) / 1000) > 0) {
-			op_dump_regs(chg);
 			aging_test_check_aicl(chg);
 		}
 	}
@@ -6330,7 +6299,6 @@ static void op_heartbeat_work(struct work_struct *work)
 		if (chg->dump_count == 600) {
 			chg->dump_count = 0;
 			if ((get_prop_batt_current_now(chg) / 1000) > 0) {
-				op_dump_regs(chg);
 				aging_test_check_aicl(chg);
 			}
 		}
