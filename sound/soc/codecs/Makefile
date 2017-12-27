@@ -428,7 +428,7 @@ obj-$(CONFIG_SND_SOC_TPA6130A2)	+= snd-soc-tpa6130a2.o
 obj-y += sdm660_cdc/
 obj-y += msm_sdw/
 
-obj-$(CONFIG_MACH_MSM8998_ONEPLUS5) += snd-soc-tfa98xx.o
+obj-$(CONFIG_MACH_MSM8998_DUMPLING) += snd-soc-tfa98xx.o
 snd-soc-tfa98xx-objs += tfa9891/tfa98xx.o
 snd-soc-tfa98xx-objs += tfa9891/tfa_container.o
 snd-soc-tfa98xx-objs += tfa9891/tfa_dsp.o

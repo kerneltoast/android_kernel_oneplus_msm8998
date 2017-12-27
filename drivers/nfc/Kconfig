@@ -78,7 +78,7 @@ source "drivers/nfc/nxp-nci/Kconfig"
 source "drivers/nfc/s3fwrn5/Kconfig"
 endmenu
 
-if MACH_MSM8998_ONEPLUS5
+if MACH_MSM8998_DUMPLING
 source "drivers/nfc/pn544/Kconfig"
 endif
 

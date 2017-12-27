@@ -840,11 +840,6 @@ config TRI_STATE_KEY
 
 source "drivers/input/misc/fingerprint_detect/Kconfig"
 source "drivers/input/misc/goodixfingerprint/Kconfig"
-
-config FINGERPRINT_FPC1022
-	default y
-	tristate "fpc fingerprint sensor support"
-	depends on SPI_MASTER
 source "drivers/input/misc/ots_pat9125/Kconfig"
 
 config INPUT_STMVL53L0
