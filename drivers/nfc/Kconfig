@@ -78,6 +78,10 @@ source "drivers/nfc/nxp-nci/Kconfig"
 source "drivers/nfc/s3fwrn5/Kconfig"
 endmenu
 
+if MACH_MSM8998_ONEPLUS5
+source "drivers/nfc/pn544/Kconfig"
+endif
+
 config NFC_NQ
 	tristate "QTI NCI based NFC Controller Driver for NQx"
 	depends on I2C

@@ -243,6 +243,9 @@ dtb-$(CONFIG_ARCH_SDM630) += sdm630-rumi.dtb \
 	sdm630-pm660a-headset-jacktype-no-cdp.dtb \
 	sdm630-pm660a-headset-jacktype-no-rcm.dtb
 
+dtb-$(CONFIG_MACH_MSM8998_ONEPLUS5) := cheeseburger-v2.1-pvt.dtb \
+	dumpling-v2.1-pvt.dtb
+
 ifeq ($(CONFIG_ARM64),y)
 always          := $(dtb-y)
 always          += $(dtbo-y)

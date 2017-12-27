@@ -60,6 +60,35 @@ enum pon_restart_reason {
 	PON_RESTART_REASON_KEYS_CLEAR		= 0x06,
 };
 
+struct qpnp_pon {
+	struct platform_device	*pdev;
+	struct regmap		*regmap;
+	struct input_dev	*pon_input;
+	struct qpnp_pon_config	*pon_cfg;
+	struct pon_regulator	*pon_reg_cfg;
+	struct list_head	list;
+	struct delayed_work	bark_work;
+	struct dentry		*debugfs;
+	int			pon_trigger_reason;
+	int			pon_power_off_reason;
+	int			num_pon_reg;
+	int			num_pon_config;
+	u32			dbc_time_us;
+	u32			uvlo;
+	int			warm_reset_poff_type;
+	int			hard_reset_poff_type;
+	int			shutdown_poff_type;
+	u16			base;
+	u8			subtype;
+	u8			pon_ver;
+	u8			warm_reset_reason1;
+	u8			warm_reset_reason2;
+	bool			is_spon;
+	bool			store_hard_reset_reason;
+	bool			kpdpwr_dbc_enable;
+	ktime_t			kpdpwr_last_release_time;
+};
+
 #ifdef CONFIG_INPUT_QPNP_POWER_ON
 int qpnp_pon_system_pwr_off(enum pon_power_off_type type);
 int qpnp_pon_is_warm_reset(void);

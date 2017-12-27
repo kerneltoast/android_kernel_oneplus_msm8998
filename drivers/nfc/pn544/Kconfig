@@ -1,6 +1,5 @@
 config NFC_PN544
-	tristate
-	select CRC_CCITT
+	tristate "NXP PN544 device support"
 	---help---
 	  NXP PN544 core driver.
 	  This is a driver based on the HCI NFC kernel layers and
