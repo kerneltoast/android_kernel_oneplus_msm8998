@@ -3085,6 +3085,18 @@ static int fg_psy_get_property(struct power_supply *psy,
 		else
 			pval->intval = 0;
 		break;
+	case POWER_SUPPLY_PROP_POWER_NOW:
+		if (chip->use_external_fg && external_fg &&
+				external_fg->get_average_current &&
+				external_fg->get_battery_mvolts) {
+			int mA, mV;
+			mA = external_fg->get_average_current() / 1000;
+			mV = external_fg->get_battery_mvolts() / 1000;
+			pval->intval = (mA * mV) / 1000;
+		} else {
+			pval->intval = 0;
+		}
+		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (!get_extern_fg_regist_done()
 			&& get_extern_bq_present())
@@ -3271,6 +3283,7 @@ static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_POWER_NOW,
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
 	POWER_SUPPLY_PROP_RESISTANCE,
 	POWER_SUPPLY_PROP_BATTERY_TYPE,
