@@ -2414,6 +2414,12 @@
 		};
 	};
 
+	qcom,msm-thermal-simple {
+		compatible = "qcom,msm-thermal-simple";
+		qcom,thermal-vadc = <&pm8998_vadc>;
+		qcom,adc-channel = <0x4f>; /* VADC_AMUX_THM3_PU2 */
+	};
+
 	pcie0: qcom,pcie@01c00000 {
 		compatible = "qcom,pci-msm";
 		cell-index = <0>;
