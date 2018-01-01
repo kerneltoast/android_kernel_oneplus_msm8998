@@ -6180,6 +6180,7 @@ static struct snd_soc_dai_link msm_wcn_be_dai_links[] = {
 };
 
 static struct snd_soc_dai_link ext_disp_be_dai_link[] = {
+#ifdef CONFIG_SND_SOC_MSM_HDMI_CODEC_RX
 	/* HDMI BACK END DAI Link */
 	{
 		.name = LPASS_BE_HDMI,
@@ -6210,6 +6211,7 @@ static struct snd_soc_dai_link ext_disp_be_dai_link[] = {
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
 	},
+#endif
 };
 
 static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
