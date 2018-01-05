@@ -50,8 +50,6 @@
 #include <linux/platform_device.h>
 #endif
 
-#include "../fingerprint_detect/fingerprint_detect.h"
-
 #define VER_MAJOR   1
 #define VER_MINOR   2
 #define PATCH_LEVEL 1
@@ -851,9 +849,6 @@ static int __init gf_init(void)
 	 * that will key udev/mdev to add/remove /dev nodes.  Last, register
 	 * the driver which manages those device numbers.
 	 */
-	pr_info("%s:fp version %x\n", __func__, fp_version);
-	if(0x03 != fp_version)
-		return 0;
 	BUILD_BUG_ON(N_SPI_MINORS > 256);
 	status = register_chrdev(SPIDEV_MAJOR, CHRD_DRIVER_NAME, &gf_fops);
 	if (status < 0) {
