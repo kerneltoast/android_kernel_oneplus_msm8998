@@ -515,8 +515,6 @@ static int msm_snd_enable_codec_ext_clk(struct snd_soc_codec *codec,
 					int enable, bool dapm);
 static int msm_wsa881x_init(struct snd_soc_component *component);
 
-static bool op_project_17801;
-
 /*
  * Need to report LINEIN
  * if R/L channel impedance is larger than 5K ohm
@@ -2906,35 +2904,6 @@ static const struct snd_soc_dapm_widget msm_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCRight Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCLeft Headset Mic", NULL),
-	SND_SOC_DAPM_MIC("Analog Mic5", NULL),
-	SND_SOC_DAPM_MIC("Analog Mic6", NULL),
-
-	SND_SOC_DAPM_MIC("Digital Mic0", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic1", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic2", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic3", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic4", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic5", NULL),
-};
-
-static const struct snd_soc_dapm_widget msm_dapm_widgets_17801[] = {
-
-	SND_SOC_DAPM_SUPPLY("MCLK",  SND_SOC_NOPM, 0, 0,
-			    msm_mclk_event,
-			    SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-
-	SND_SOC_DAPM_SUPPLY("MCLK TX",  SND_SOC_NOPM, 0, 0,
-	msm_mclk_tx_event, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-
-	SND_SOC_DAPM_SPK("Lineout_1 amp", NULL),
-	SND_SOC_DAPM_SPK("Lineout_3 amp", NULL),
-	SND_SOC_DAPM_SPK("Lineout_2 amp", NULL),
-	SND_SOC_DAPM_SPK("Lineout_4 amp", NULL),
-	SND_SOC_DAPM_SPK("hifi amp", msm_hifi_ctrl_event),
-	SND_SOC_DAPM_MIC("Handset Mic", NULL),
-	SND_SOC_DAPM_MIC("Headset Mic", NULL),
-	SND_SOC_DAPM_MIC("ANCRight Headset Mic", NULL),
-	SND_SOC_DAPM_MIC("ANCLeft Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("Analog Mic3", NULL),
 	SND_SOC_DAPM_MIC("Analog Mic4", NULL),
 	SND_SOC_DAPM_MIC("Analog Mic5", NULL),
@@ -3584,13 +3553,8 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 	}
 
-	if (op_project_17801) {
-		snd_soc_dapm_new_controls(dapm, msm_dapm_widgets_17801,
-					ARRAY_SIZE(msm_dapm_widgets_17801));
-	} else {
-		snd_soc_dapm_new_controls(dapm, msm_dapm_widgets,
-					ARRAY_SIZE(msm_dapm_widgets));
-	}
+	snd_soc_dapm_new_controls(dapm, msm_dapm_widgets,
+				ARRAY_SIZE(msm_dapm_widgets));
 
 	if (!strcmp(dev_name(codec_dai->dev), "tasha_codec"))
 		snd_soc_dapm_add_routes(dapm, wcd_audio_paths_tasha,
@@ -3609,10 +3573,8 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic3");
 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic4");
 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic5");
-	if (op_project_17801) {
-		snd_soc_dapm_ignore_suspend(dapm, "Analog Mic3");
-		snd_soc_dapm_ignore_suspend(dapm, "Analog Mic4");
-	}
+	snd_soc_dapm_ignore_suspend(dapm, "Analog Mic3");
+	snd_soc_dapm_ignore_suspend(dapm, "Analog Mic4");
 	snd_soc_dapm_ignore_suspend(dapm, "Analog Mic5");
 	snd_soc_dapm_ignore_suspend(dapm, "Analog Mic6");
 	snd_soc_dapm_ignore_suspend(dapm, "MADINPUT");
@@ -6686,13 +6648,8 @@ static int msm_audrx_stub_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 	}
 
-	if (op_project_17801) {
-		snd_soc_dapm_new_controls(dapm, msm_dapm_widgets_17801,
-					ARRAY_SIZE(msm_dapm_widgets_17801));
-	} else {
-		snd_soc_dapm_new_controls(dapm, msm_dapm_widgets,
-					ARRAY_SIZE(msm_dapm_widgets));
-	}
+	snd_soc_dapm_new_controls(dapm, msm_dapm_widgets,
+				ARRAY_SIZE(msm_dapm_widgets));
 
 	return 0;
 }
@@ -7290,9 +7247,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	card->dev = &pdev->dev;
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, pdata);
-
-	op_project_17801 = of_property_read_bool(card->dev->of_node,
-							"op,project_17801");
 
 	ret = snd_soc_of_parse_card_name(card, "qcom,model");
 	if (ret) {
