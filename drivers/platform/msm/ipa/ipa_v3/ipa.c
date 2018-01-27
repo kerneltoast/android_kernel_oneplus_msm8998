@@ -1673,6 +1673,21 @@ int ipa3_setup_dflt_rt_tables(void)
 	return 0;
 }
 
+static int ipa3_clkon_cfg_wa(void)
+{
+	struct ipahal_reg_clkon_cfg clkon_cfg = { 0 };
+	int ret = 0;
+
+	clkon_cfg.cgc_open_misc = 1;
+
+	if (ipa3_cfg_clkon_cfg(&clkon_cfg)) {
+		IPAERR("fail to set cgc_open_misc = 1\n");
+		ret = -EPERM;
+	}
+
+	return ret;
+}
+
 static int ipa3_setup_exception_path(void)
 {
 	struct ipa_ioc_add_hdr *hdr;
@@ -3973,6 +3988,9 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 	struct gsi_per_props gsi_props;
 	struct ipa3_uc_hdlrs uc_hdlrs = { 0 };
 
+	/* move proxy vote for modem on ipa3_post_init */
+	IPA_ACTIVE_CLIENTS_INC_SPECIAL("PROXY_CLK_VOTE");
+
 	if (ipa3_ctx->transport_prototype == IPA_TRANSPORT_TYPE_GSI) {
 		memset(&gsi_props, 0, sizeof(gsi_props));
 		gsi_props.ver = ipa3_get_gsi_ver(resource_p->ipa_hw_type);
@@ -4066,6 +4084,7 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_register_panic_hdlr();
 
 	ipa3_ctx->q6_proxy_clk_vote_valid = true;
+	ipa3_ctx->q6_proxy_clk_vote_cnt++;
 
 	mutex_lock(&ipa3_ctx->lock);
 	ipa3_ctx->ipa_initialization_complete = true;
@@ -4073,8 +4092,14 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 
 	ipa3_trigger_ipa_ready_cbs();
 	complete_all(&ipa3_ctx->init_completion_obj);
-	pr_info("IPA driver initialization was successful.\n");
 
+	/* WA to disable MISC clock gating for IPA_HW_v3_1 */
+	if (ipa3_ctx->ipa_hw_type == IPA_HW_v3_1) {
+		pr_info(" WA to set cgc_open_misc = 1\n");
+		ipa3_clkon_cfg_wa();
+	}
+
+	pr_info("IPA driver initialization was successful\n");
 	return 0;
 
 fail_teth_bridge_driver_init:
@@ -4309,7 +4334,6 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	int i;
 	struct ipa3_flt_tbl *flt_tbl;
 	struct ipa3_rt_tbl_set *rset;
-	struct ipa_active_client_logging_info log_info;
 
 	IPADBG("IPA Driver initialization started\n");
 
@@ -4499,8 +4523,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 
 	mutex_init(&ipa3_ctx->ipa3_active_clients.mutex);
 	spin_lock_init(&ipa3_ctx->ipa3_active_clients.spinlock);
-	IPA_ACTIVE_CLIENTS_PREP_SPECIAL(log_info, "PROXY_CLK_VOTE");
-	ipa3_active_clients_log_inc(&log_info, false);
+	/* move proxy vote for modem to ipa3_post_init() */
 	ipa3_ctx->ipa3_active_clients.cnt = 1;
 
 	/* Assign resource limitation to each group */
@@ -4664,6 +4687,8 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	mutex_init(&ipa3_ctx->lock);
 	mutex_init(&ipa3_ctx->nat_mem.lock);
 	mutex_init(&ipa3_ctx->ipa_cne_evt_lock);
+	mutex_init(&ipa3_ctx->q6_proxy_clk_vote_mutex);
+	ipa3_ctx->q6_proxy_clk_vote_cnt = 0;
 
 	idr_init(&ipa3_ctx->ipa_idr);
 	spin_lock_init(&ipa3_ctx->idr_lock);
@@ -4751,7 +4776,6 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 
 	init_completion(&ipa3_ctx->init_completion_obj);
 	init_completion(&ipa3_ctx->uc_loaded_completion_obj);
-
 	/*
 	 * For GSI, we can't register the GSI driver yet, as it expects
 	 * the GSI FW to be up and running before the registration.
@@ -4774,6 +4798,8 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	else
 		return ipa3_post_init(resource_p, ipa_dev);
 
+	/* proxy vote for motem is added in ipa3_post_init() phase */
+	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 	return 0;
 
 fail_ipa_init_interrupts:

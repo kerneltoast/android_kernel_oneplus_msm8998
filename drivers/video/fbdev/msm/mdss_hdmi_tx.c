@@ -66,7 +66,7 @@
 #define HDMI_TX_4_MAX_PCLK_RATE            600000
 
 #define hdmi_tx_get_fd(x) ((x && (ffs(x) > 0))  ? \
-			hdmi_ctrl->feature_data[ffs(x) - 1] : 0)
+			hdmi_ctrl->feature_data[ffs(x) - 1] : NULL)
 #define hdmi_tx_set_fd(x, y) {if (x && (ffs(x) > 0)) \
 			hdmi_ctrl->feature_data[ffs(x) - 1] = y; }
 
@@ -377,7 +377,9 @@ static void hdmi_tx_audio_setup(struct hdmi_tx_ctrl *hdmi_ctrl)
 
 static inline u32 hdmi_tx_is_dvi_mode(struct hdmi_tx_ctrl *hdmi_ctrl)
 {
-	return hdmi_edid_is_dvi_mode(hdmi_tx_get_fd(HDMI_TX_FEAT_EDID));
+	void *data = hdmi_tx_get_fd(HDMI_TX_FEAT_EDID);
+
+	return hdmi_edid_is_dvi_mode(data);
 } /* hdmi_tx_is_dvi_mode */
 
 static inline u32 hdmi_tx_is_in_splash(struct hdmi_tx_ctrl *hdmi_ctrl)
@@ -2162,6 +2164,8 @@ static int hdmi_tx_init_panel_info(struct hdmi_tx_ctrl *hdmi_ctrl)
 	pinfo->lcdc.v_front_porch = timing.front_porch_v;
 	pinfo->lcdc.v_pulse_width = timing.pulse_width_v;
 	pinfo->lcdc.frame_rate = timing.refresh_rate;
+	pinfo->lcdc.h_polarity = timing.active_low_h;
+	pinfo->lcdc.v_polarity = timing.active_low_v;
 
 	pinfo->type = DTV_PANEL;
 	pinfo->pdest = DISPLAY_3;
@@ -2189,6 +2193,7 @@ static int hdmi_tx_read_sink_info(struct hdmi_tx_ctrl *hdmi_ctrl)
 	int status = 0;
 	void *data;
 	struct dss_io_data *io;
+	u32 sink_max_pclk;
 
 	if (!hdmi_ctrl) {
 		DEV_ERR("%s: invalid input\n", __func__);
@@ -2228,16 +2233,22 @@ static int hdmi_tx_read_sink_info(struct hdmi_tx_ctrl *hdmi_ctrl)
 	/* parse edid if a valid edid buffer is present */
 	if (hdmi_ctrl->custom_edid || !hdmi_ctrl->sim_mode) {
 		status = hdmi_edid_parser(data);
-		if (status)
+		if (status) {
 			DEV_ERR("%s: edid parse failed\n", __func__);
-		else
+		} else {
 			/*
-			 * Updata HDMI max supported TMDS clock, consider
-			 * both sink and source capicity.
+			 * Update HDMI max supported TMDS clock, consider
+			 * both sink and source capacity. For DVI sink,
+			 * could not get max TMDS clock from EDID, so just
+			 * use source capacity.
 			 */
-			hdmi_edid_set_max_pclk_rate(data,
-			  min(hdmi_edid_get_sink_caps_max_tmds_clk(data) / 1000,
-			      hdmi_ctrl->max_pclk_khz));
+			sink_max_pclk =
+				hdmi_edid_get_sink_caps_max_tmds_clk(data);
+			if (sink_max_pclk != 0)
+				hdmi_edid_set_max_pclk_rate(data,
+				  min(sink_max_pclk / 1000,
+				      hdmi_ctrl->max_pclk_khz));
+		}
 	}
 bail:
 	if (hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_DDC_PM, false))
@@ -2448,6 +2459,7 @@ static void hdmi_tx_set_mode(struct hdmi_tx_ctrl *hdmi_ctrl, u32 power_on)
 	struct dss_io_data *io = NULL;
 	/* Defaults: Disable block, HDMI mode */
 	u32 hdmi_ctrl_reg = BIT(1);
+	void *data = hdmi_tx_get_fd(HDMI_TX_FEAT_EDID);
 
 	if (!hdmi_ctrl) {
 		DEV_ERR("%s: invalid input\n", __func__);
@@ -2476,7 +2488,7 @@ static void hdmi_tx_set_mode(struct hdmi_tx_ctrl *hdmi_ctrl, u32 power_on)
 			hdmi_ctrl_reg |= BIT(2);
 
 		/* Set transmission mode to DVI based in EDID info */
-		if (hdmi_edid_is_dvi_mode(hdmi_tx_get_fd(HDMI_TX_FEAT_EDID)))
+		if (hdmi_edid_is_dvi_mode(data))
 			hdmi_ctrl_reg &= ~BIT(1); /* DVI mode */
 
 		/*

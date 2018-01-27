@@ -1874,7 +1874,7 @@ void msm_vfe47_cfg_axi_ub_equal_default(
 
 			rdi_ub_offset = (SRC_TO_INTF(
 					HANDLE_TO_IDX(axi_data->free_wm[i])) -
-					VFE_RAW_0) *
+					VFE_RAW_0 ) *
 					axi_data->hw_info->min_wm_ub * 2;
 			wm_ub_size = axi_data->hw_info->min_wm_ub * 2;
 			msm_camera_io_w(rdi_ub_offset << 16 | (wm_ub_size - 1),

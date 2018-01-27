@@ -3263,21 +3263,6 @@ end:
 	return rc;
 }
 
-static void mdss_dsi_ctrl_validate_lane_swap_config(
-	struct mdss_dsi_ctrl_pdata *ctrl)
-{
-	struct mipi_panel_info *mipi = &ctrl->panel_data.panel_info.mipi;
-
-	if (!mipi->data_lane0)
-		ctrl->lane_map[DSI_LOGICAL_LANE_0] = DSI_PHYSICAL_LANE_INVALID;
-	if (!mipi->data_lane1)
-		ctrl->lane_map[DSI_LOGICAL_LANE_1] = DSI_PHYSICAL_LANE_INVALID;
-	if (!mipi->data_lane2)
-		ctrl->lane_map[DSI_LOGICAL_LANE_2] = DSI_PHYSICAL_LANE_INVALID;
-	if (!mipi->data_lane3)
-		ctrl->lane_map[DSI_LOGICAL_LANE_3] = DSI_PHYSICAL_LANE_INVALID;
-}
-
 static int mdss_dsi_ctrl_validate_config(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	int rc = 0;
@@ -3286,8 +3271,6 @@ static int mdss_dsi_ctrl_validate_config(struct mdss_dsi_ctrl_pdata *ctrl)
 		rc = -EINVAL;
 		goto error;
 	}
-
-	mdss_dsi_ctrl_validate_lane_swap_config(ctrl);
 
 	/*
 	 * check to make sure that the byte interface clock is specified for
@@ -4306,15 +4289,6 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	ctrl_pdata->bklt_en_gpio_invert =
 			of_property_read_bool(ctrl_pdev->dev.of_node,
 				"qcom,platform-bklight-en-gpio-invert");
-
-	ctrl_pdata->avdd_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
-			"qcom,platform-avdd-en-gpio", 0);
-	if (!gpio_is_valid(ctrl_pdata->avdd_en_gpio))
-		pr_info("%s: avdd_en gpio not specified\n", __func__);
-
-	ctrl_pdata->avdd_en_gpio_invert =
-			of_property_read_bool(ctrl_pdev->dev.of_node,
-				"qcom,platform-avdd-en-gpio-invert");
 
 	ctrl_pdata->rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 			 "qcom,platform-reset-gpio", 0);

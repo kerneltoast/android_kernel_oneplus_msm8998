@@ -289,15 +289,6 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 			rc);
 		goto rst_gpio_err;
 	}
-	if (gpio_is_valid(ctrl_pdata->avdd_en_gpio)) {
-		rc = gpio_request(ctrl_pdata->avdd_en_gpio,
-						"avdd_enable");
-		if (rc) {
-			pr_err("request avdd_en gpio failed, rc=%d\n",
-				       rc);
-			goto avdd_en_gpio_err;
-		}
-	}
 	if (gpio_is_valid(ctrl_pdata->lcd_mode_sel_gpio)) {
 		rc = gpio_request(ctrl_pdata->lcd_mode_sel_gpio, "mode_sel");
 		if (rc) {
@@ -310,9 +301,6 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	return rc;
 
 lcd_mode_sel_gpio_err:
-	if (gpio_is_valid(ctrl_pdata->avdd_en_gpio))
-		gpio_free(ctrl_pdata->avdd_en_gpio);
-avdd_en_gpio_err:
 	gpio_free(ctrl_pdata->rst_gpio);
 rst_gpio_err:
 	if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
@@ -465,21 +453,6 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 				if (pdata->panel_info.rst_seq[++i])
 					usleep_range(pinfo->rst_seq[i] * 1000, pinfo->rst_seq[i] * 1000);
 			}
-
-			if (gpio_is_valid(ctrl_pdata->avdd_en_gpio)) {
-				if (ctrl_pdata->avdd_en_gpio_invert) {
-					rc = gpio_direction_output(
-						ctrl_pdata->avdd_en_gpio, 0);
-				} else {
-					rc = gpio_direction_output(
-						ctrl_pdata->avdd_en_gpio, 1);
-				}
-				if (rc) {
-					pr_err("%s: unable to set dir for avdd_en gpio\n",
-						__func__);
-					goto exit;
-				}
-			}
 		}
 
 		if (gpio_is_valid(ctrl_pdata->lcd_mode_sel_gpio)) {
@@ -508,14 +481,6 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			pr_debug("%s: Reset panel done\n", __func__);
 		}
 	} else {
-		if (gpio_is_valid(ctrl_pdata->avdd_en_gpio)) {
-			if (ctrl_pdata->avdd_en_gpio_invert)
-				gpio_set_value((ctrl_pdata->avdd_en_gpio), 1);
-			else
-				gpio_set_value((ctrl_pdata->avdd_en_gpio), 0);
-
-			gpio_free(ctrl_pdata->avdd_en_gpio);
-		}
 		if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
 			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
 			gpio_free(ctrl_pdata->disp_en_gpio);
@@ -979,7 +944,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 
 	if (ctrl->ds_registered)
 		mdss_dba_utils_video_on(pinfo->dba_data, pinfo);
-	
+
 	if (pdata->event_handler)
 		pdata->event_handler(pdata, MDSS_EVENT_UPDATE_LIVEDISPLAY,
 				(void *)(unsigned long) MODE_UPDATE_ALL);

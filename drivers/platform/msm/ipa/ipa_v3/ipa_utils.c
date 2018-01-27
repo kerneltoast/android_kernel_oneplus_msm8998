@@ -795,6 +795,28 @@ void _ipa_sram_settings_read_v3_0(void)
 }
 
 /**
+ * ipa3_cfg_clkon_cfg() - configure IPA clkon_cfg
+ * @clkon_cfg: IPA clkon_cfg
+ *
+ * Return codes:
+ * 0: success
+ */
+int ipa3_cfg_clkon_cfg(struct ipahal_reg_clkon_cfg *clkon_cfg)
+{
+
+	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
+
+	IPADBG("cgc_open_misc = %d\n",
+		clkon_cfg->cgc_open_misc);
+
+	ipahal_write_reg_fields(IPA_CLKON_CFG, clkon_cfg);
+
+	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
+
+	return 0;
+}
+
+/**
  * ipa3_cfg_route() - configure IPA route
  * @route: IPA route
  *
@@ -2961,10 +2983,17 @@ bool ipa3_is_client_handle_valid(u32 clnt_hdl)
  */
 void ipa3_proxy_clk_unvote(void)
 {
-	if (ipa3_is_ready() && ipa3_ctx->q6_proxy_clk_vote_valid) {
+	if (!ipa3_is_ready())
+		return;
+
+	mutex_lock(&ipa3_ctx->q6_proxy_clk_vote_mutex);
+	if (ipa3_ctx->q6_proxy_clk_vote_valid) {
 		IPA_ACTIVE_CLIENTS_DEC_SPECIAL("PROXY_CLK_VOTE");
-		ipa3_ctx->q6_proxy_clk_vote_valid = false;
+		ipa3_ctx->q6_proxy_clk_vote_cnt--;
+		if (ipa3_ctx->q6_proxy_clk_vote_cnt == 0)
+			ipa3_ctx->q6_proxy_clk_vote_valid = false;
 	}
+	mutex_unlock(&ipa3_ctx->q6_proxy_clk_vote_mutex);
 }
 
 /**
@@ -2974,10 +3003,17 @@ void ipa3_proxy_clk_unvote(void)
  */
 void ipa3_proxy_clk_vote(void)
 {
-	if (ipa3_is_ready() && !ipa3_ctx->q6_proxy_clk_vote_valid) {
+	if (!ipa3_is_ready())
+		return;
+
+	mutex_lock(&ipa3_ctx->q6_proxy_clk_vote_mutex);
+	if (!ipa3_ctx->q6_proxy_clk_vote_valid ||
+		(ipa3_ctx->q6_proxy_clk_vote_cnt > 0)) {
 		IPA_ACTIVE_CLIENTS_INC_SPECIAL("PROXY_CLK_VOTE");
+		ipa3_ctx->q6_proxy_clk_vote_cnt++;
 		ipa3_ctx->q6_proxy_clk_vote_valid = true;
 	}
+	mutex_unlock(&ipa3_ctx->q6_proxy_clk_vote_mutex);
 }
 
 /**

@@ -1194,11 +1194,24 @@ static int mdss_fb_init_panel_modes(struct msm_fb_data_type *mfd,
 		if (pdata->next) {
 			spt = mdss_panel_get_timing_by_name(pdata->next,
 					modedb[i].name);
-			if (!IS_ERR_OR_NULL(spt))
+			/* for split config, recalculate xres and pixel clock */
+			if (!IS_ERR_OR_NULL(spt)) {
+				unsigned long pclk, h_total, v_total;
 				modedb[i].xres += spt->xres;
-			else
+				h_total = modedb[i].xres +
+					modedb[i].left_margin +
+					modedb[i].right_margin +
+					modedb[i].hsync_len;
+				v_total = modedb[i].yres +
+					modedb[i].lower_margin +
+					modedb[i].upper_margin +
+					modedb[i].vsync_len;
+				pclk = h_total * v_total * modedb[i].refresh;
+				modedb[i].pixclock = KHZ2PICOS(pclk / 1000);
+			} else {
 				pr_debug("no matching split config for %s\n",
 						modedb[i].name);
+			}
 
 			/*
 			 * if no panel timing found for current, need to
@@ -3609,6 +3622,17 @@ static void mdss_fb_var_to_panelinfo(struct fb_var_screeninfo *var,
 	 */
 	if (pinfo->is_dba_panel)
 		pinfo->mipi.dsi_pclk_rate = pinfo->clk_rate;
+
+	if (var->sync & FB_SYNC_HOR_HIGH_ACT)
+		pinfo->lcdc.h_polarity = 0;
+	else
+		pinfo->lcdc.h_polarity = 1;
+
+	if (var->sync & FB_SYNC_VERT_HIGH_ACT)
+		pinfo->lcdc.v_polarity = 0;
+	else
+		pinfo->lcdc.v_polarity = 1;
+
 }
 
 void mdss_panelinfo_to_fb_var(struct mdss_panel_info *pinfo,

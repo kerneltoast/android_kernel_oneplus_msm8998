@@ -129,37 +129,6 @@ void diag_md_close_all()
 	diag_ws_reset(DIAG_WS_MUX);
 }
 
-static int diag_md_get_peripheral(int ctxt)
-{
-	int peripheral;
-
-	if (driver->num_pd_session) {
-		peripheral = GET_PD_CTXT(ctxt);
-		switch (peripheral) {
-		case UPD_WLAN:
-		case UPD_AUDIO:
-		case UPD_SENSORS:
-			break;
-		case DIAG_ID_MPSS:
-		case DIAG_ID_LPASS:
-		case DIAG_ID_CDSP:
-		default:
-			peripheral =
-				GET_BUF_PERIPHERAL(ctxt);
-			if (peripheral > NUM_PERIPHERALS)
-				peripheral = -EINVAL;
-			break;
-		}
-	} else {
-		/* Account for Apps data as well */
-		peripheral = GET_BUF_PERIPHERAL(ctxt);
-		if (peripheral > NUM_PERIPHERALS)
-			peripheral = -EINVAL;
-	}
-
-	return peripheral;
-}
-
 int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 {
 	int i;
@@ -186,15 +155,20 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 		return -EIO;
 
 	ch = &diag_md[id];
+	if (!ch)
+		return -EINVAL;
 
 	spin_lock_irqsave(&ch->lock, flags);
 	for (i = 0; i < ch->num_tbl_entries && !found; i++) {
 		if (ch->tbl[i].buf != buf)
 			continue;
 		found = 1;
-		pr_err_ratelimited("diag: trying to write the same buffer buf: %pK, ctxt: %d len: %d at i: %d back to the table, proc: %d, mode: %d\n",
-				   buf, ctx, ch->tbl[i].len,
-				   i, id, driver->logging_mode);
+		pr_err_ratelimited("diag: trying to write the same buffer buf: %pK, len: %d, back to the table for p: %d, t: %d, buf_num: %d, proc: %d, i: %d\n",
+				   buf, ch->tbl[i].len, GET_BUF_PERIPHERAL(ctx),
+				   GET_BUF_TYPE(ctx), GET_BUF_NUM(ctx), id, i);
+		ch->tbl[i].buf = NULL;
+		ch->tbl[i].len = 0;
+		ch->tbl[i].ctx = 0;
 	}
 	spin_unlock_irqrestore(&ch->lock, flags);
 
@@ -254,13 +228,11 @@ int diag_md_copy_to_user(char __user *buf, int *pret, size_t buf_size,
 	struct diag_md_session_t *session_info = NULL;
 	struct pid *pid_struct = NULL;
 
-	mutex_lock(&driver->diagfwd_untag_mutex);
-
 	for (i = 0; i < NUM_DIAG_MD_DEV && !err; i++) {
 		ch = &diag_md[i];
 		for (j = 0; j < ch->num_tbl_entries && !err; j++) {
 			entry = &ch->tbl[j];
-			if (entry->len <= 0)
+			if (entry->len <= 0 || entry->buf == NULL)
 				continue;
 
 			peripheral = diag_md_get_peripheral(entry->ctx);
@@ -360,16 +332,10 @@ drop_data:
 		err = copy_to_user(buf + sizeof(int),
 				(void *)&num_data,
 				sizeof(int));
-	} else {
-		DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
-			"diag: md_session_map[%d] with pid = %d Exited..\n",
-			peripheral, driver->md_session_map[peripheral]->pid);
 	}
 	diag_ws_on_copy_complete(DIAG_WS_MUX);
 	if (drain_again)
 		chk_logging_wakeup();
-
-	mutex_unlock(&driver->diagfwd_untag_mutex);
 
 	return err;
 }

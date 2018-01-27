@@ -13,6 +13,7 @@
 #define pr_fmt(fmt) "icnss: " fmt
 
 #include <asm/dma-iommu.h>
+#include <linux/of_address.h>
 #include <linux/clk.h>
 #include <linux/iommu.h>
 #include <linux/export.h>
@@ -47,6 +48,11 @@
 #include <soc/qcom/service-notifier.h>
 #include <soc/qcom/socinfo.h>
 #include <soc/qcom/ramdump.h>
+
+#ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
+#include <net/cnss_prealloc.h>
+#endif
+
 
 #include "wlan_firmware_service_v01.h"
 
@@ -126,6 +132,8 @@ bool ignore_qmi_timeout;
 #define ICNSS_ASSERT(_condition) do { } while (0)
 #define ICNSS_QMI_ASSERT() do { } while (0)
 #endif
+
+#define QMI_ERR_PLAT_CCPM_CLK_INIT_FAILED 0x77
 
 enum icnss_debug_quirks {
 	HW_ALWAYS_ON,
@@ -541,7 +549,7 @@ static int wlfw_vbatt_send_sync_msg(struct icnss_priv *priv,
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI vbatt request rejected, result:%d error:%d\n",
 			resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
 		goto out;
 	}
 	priv->stats.vbatt_resp++;
@@ -1138,7 +1146,7 @@ static int wlfw_msa_mem_info_send_sync_msg(void)
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI MSA Mem info request rejected, result:%d error:%d\n",
 			resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
 		goto out;
 	}
 
@@ -1210,7 +1218,7 @@ static int wlfw_msa_ready_send_sync_msg(void)
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI MSA ready request rejected: result:%d error:%d\n",
 			resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
 		goto out;
 	}
 	penv->stats.msa_ready_resp++;
@@ -1273,7 +1281,7 @@ static int wlfw_ind_register_send_sync_msg(void)
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI indication register request rejected, resut:%d error:%d\n",
 		       resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
 		goto out;
 	}
 	penv->stats.ind_register_resp++;
@@ -1320,7 +1328,9 @@ static int wlfw_cap_send_sync_msg(void)
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI capability request rejected, result:%d error:%d\n",
 		       resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
+		if (resp.resp.error == QMI_ERR_PLAT_CCPM_CLK_INIT_FAILED)
+			icnss_pr_err("RF card Not present");
 		goto out;
 	}
 
@@ -1403,7 +1413,7 @@ static int wlfw_wlan_mode_send_sync_msg(enum wlfw_driver_mode_enum_v01 mode)
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI mode request rejected, mode:%d result:%d error:%d\n",
 			     mode, resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
 		goto out;
 	}
 	penv->stats.mode_resp++;
@@ -1453,7 +1463,7 @@ static int wlfw_wlan_cfg_send_sync_msg(struct wlfw_wlan_cfg_req_msg_v01 *data)
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI config request rejected, result:%d error:%d\n",
 		       resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
 		goto out;
 	}
 	penv->stats.cfg_resp++;
@@ -1506,7 +1516,7 @@ static int wlfw_ini_send_sync_msg(uint8_t fw_log_mode)
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI INI request rejected, fw_log_mode:%d result:%d error:%d\n",
 			     fw_log_mode, resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
 		goto out;
 	}
 	penv->stats.ini_resp++;
@@ -1566,7 +1576,7 @@ static int wlfw_athdiag_read_send_sync_msg(struct icnss_priv *priv,
 	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI athdiag read request rejected, result:%d error:%d\n",
 			     resp->resp.result, resp->resp.error);
-		ret = resp->resp.result;
+		ret = -resp->resp.result;
 		goto out;
 	}
 
@@ -1632,7 +1642,7 @@ static int wlfw_athdiag_write_send_sync_msg(struct icnss_priv *priv,
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI athdiag write request rejected, result:%d error:%d\n",
 			     resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
 		goto out;
 	}
 out:
@@ -1727,7 +1737,7 @@ static int wlfw_rejuvenate_ack_send_sync_msg(struct icnss_priv *priv)
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI rejuvenate ack request rejected, result:%d error %d\n",
 			     resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
 		goto out;
 	}
 	priv->stats.rejuvenate_ack_resp++;
@@ -1788,7 +1798,7 @@ static int wlfw_dynamic_feature_mask_send_sync_msg(struct icnss_priv *priv,
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		icnss_pr_err("QMI dynamic feature mask request rejected, result:%d error %d\n",
 			     resp.resp.result, resp.resp.error);
-		ret = resp.resp.result;
+		ret = -resp.resp.result;
 		goto out;
 	}
 
@@ -2027,6 +2037,8 @@ static int icnss_call_driver_probe(struct icnss_priv *priv)
 	if (ret < 0) {
 		icnss_pr_err("Driver probe failed: %d, state: 0x%lx\n",
 			     ret, priv->state);
+		wcnss_prealloc_check_memory_leak();
+		wcnss_pre_alloc_reset();
 		goto out;
 	}
 
@@ -2161,6 +2173,8 @@ static int icnss_driver_event_register_driver(void *data)
 	if (ret) {
 		icnss_pr_err("Driver probe failed: %d, state: 0x%lx\n",
 			     ret, penv->state);
+		wcnss_prealloc_check_memory_leak();
+		wcnss_pre_alloc_reset();
 		goto power_off;
 	}
 
@@ -2185,6 +2199,8 @@ static int icnss_driver_event_unregister_driver(void *data)
 		penv->ops->remove(&penv->pdev->dev);
 
 	clear_bit(ICNSS_DRIVER_PROBED, &penv->state);
+	wcnss_prealloc_check_memory_leak();
+	wcnss_pre_alloc_reset();
 
 	penv->ops = NULL;
 
@@ -2209,6 +2225,8 @@ static int icnss_call_driver_remove(struct icnss_priv *priv)
 	penv->ops->remove(&priv->pdev->dev);
 
 	clear_bit(ICNSS_DRIVER_PROBED, &priv->state);
+	wcnss_prealloc_check_memory_leak();
+	wcnss_pre_alloc_reset();
 
 	icnss_hw_power_off(penv);
 
@@ -3994,6 +4012,7 @@ static int icnss_regread_show(struct seq_file *s, void *data)
 	seq_hex_dump(s, "", DUMP_PREFIX_OFFSET, 32, 4, priv->diag_reg_read_buf,
 		     priv->diag_reg_read_len, false);
 
+	mutex_lock(&priv->dev_lock);
 	priv->diag_reg_read_len = 0;
 	kfree(priv->diag_reg_read_buf);
 	priv->diag_reg_read_buf = NULL;
@@ -4077,6 +4096,7 @@ static ssize_t icnss_regread_write(struct file *fp, const char __user *user_buf,
 		return ret;
 	}
 
+	mutex_lock(&priv->dev_lock);
 	priv->diag_reg_read_addr = reg_offset;
 	priv->diag_reg_read_mem_type = mem_type;
 	priv->diag_reg_read_len = data_len;
@@ -4183,6 +4203,9 @@ static int icnss_probe(struct platform_device *pdev)
 	int i;
 	struct device *dev = &pdev->dev;
 	struct icnss_priv *priv;
+	const __be32 *addrp;
+	u64 prop_size = 0;
+	struct device_node *np;
 
 	if (penv) {
 		icnss_pr_err("Driver is already initialized\n");
@@ -4254,24 +4277,53 @@ static int icnss_probe(struct platform_device *pdev)
 		}
 	}
 
-	ret = of_property_read_u32(dev->of_node, "qcom,wlan-msa-memory",
-				   &priv->msa_mem_size);
+	np = of_parse_phandle(dev->of_node,
+			      "qcom,wlan-msa-fixed-region", 0);
+	if (np) {
+		addrp = of_get_address(np, 0, &prop_size, NULL);
+		if (!addrp) {
+			icnss_pr_err("Failed to get assigned-addresses or property\n");
+			ret = -EINVAL;
+			goto out;
+		}
 
-	if (ret || priv->msa_mem_size == 0) {
-		icnss_pr_err("Fail to get MSA Memory Size: %u, ret: %d\n",
-			     priv->msa_mem_size, ret);
-		goto out;
+		priv->msa_pa = of_translate_address(np, addrp);
+		if (priv->msa_pa == OF_BAD_ADDR) {
+			icnss_pr_err("Failed to translate MSA PA from device-tree\n");
+			ret = -EINVAL;
+			goto out;
+		}
+
+		priv->msa_va = memremap(priv->msa_pa,
+					(unsigned long)prop_size, MEMREMAP_WT);
+		if (!priv->msa_va) {
+			icnss_pr_err("MSA PA ioremap failed: phy addr: %pa\n",
+				     &priv->msa_pa);
+			ret = -EINVAL;
+			goto out;
+		}
+		priv->msa_mem_size = prop_size;
+	} else {
+		ret = of_property_read_u32(dev->of_node, "qcom,wlan-msa-memory",
+					   &priv->msa_mem_size);
+		if (ret || priv->msa_mem_size == 0) {
+			icnss_pr_err("Fail to get MSA Memory Size: %u ret: %d\n",
+				     priv->msa_mem_size, ret);
+			goto out;
+		}
+
+		priv->msa_va = dmam_alloc_coherent(&pdev->dev,
+				priv->msa_mem_size, &priv->msa_pa, GFP_KERNEL);
+
+		if (!priv->msa_va) {
+			icnss_pr_err("DMA alloc failed for MSA\n");
+			ret = -ENOMEM;
+			goto out;
+		}
 	}
 
-	priv->msa_va = dmam_alloc_coherent(&pdev->dev, priv->msa_mem_size,
-					   &priv->msa_pa, GFP_KERNEL);
-	if (!priv->msa_va) {
-		icnss_pr_err("DMA alloc failed for MSA\n");
-		ret = -ENOMEM;
-		goto out;
-	}
-	icnss_pr_dbg("MSA pa: %pa, MSA va: 0x%p\n", &priv->msa_pa,
-		     priv->msa_va);
+	icnss_pr_dbg("MSA pa: %pa, MSA va: 0x%p MSA Memory Size: 0x%x\n",
+		     &priv->msa_pa, (void *)priv->msa_va, priv->msa_mem_size);
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 					   "smmu_iova_base");

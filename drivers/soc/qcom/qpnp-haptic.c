@@ -2273,16 +2273,23 @@ static void qpnp_timed_enable_worker(struct work_struct *work)
 	time_ms = hap->td_time_ms;
 	spin_unlock(&hap->td_lock);
 
-	if (time_ms <= 0)
+	if (time_ms < 0)
 		return;
 
-	if (is_haptics_disabled())
+	mutex_lock(&hap->lock);
+
+	if (time_ms == 0 || is_haptics_disabled()) {
+		/* disable haptics */
+		hrtimer_cancel(&hap->hap_timer);
+		hap->state = 0;
+		schedule_work(&hap->work);
+		mutex_unlock(&hap->lock);
 		return;
+	}
 
 	if (time_ms < 10)
 		time_ms = 10;
 
-	mutex_lock(&hap->lock);
 	if (is_sw_lra_auto_resonance_control(hap))
 		hrtimer_cancel(&hap->auto_res_err_poll_timer);
 

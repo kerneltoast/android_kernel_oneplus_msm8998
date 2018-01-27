@@ -674,6 +674,7 @@ void msm_isp_process_reg_upd_epoch_irq(struct vfe_device *vfe_dev,
 void msm_isp_reset_framedrop(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream *stream_info)
 {
+	uint32_t framedrop_period = 0;
 	stream_info->runtime_num_burst_capture = stream_info->num_burst_capture;
 
 	/**
@@ -682,9 +683,15 @@ void msm_isp_reset_framedrop(struct vfe_device *vfe_dev,
 	 *  by the request frame api
 	 */
 	if (!stream_info->controllable_output) {
-		stream_info->current_framedrop_period =
+		framedrop_period =
 			msm_isp_get_framedrop_period(
 			stream_info->frame_skip_pattern);
+		if (stream_info->frame_skip_pattern == SKIP_ALL)
+			stream_info->current_framedrop_period =
+				MSM_VFE_STREAM_STOP_PERIOD;
+		else
+			stream_info->current_framedrop_period =
+				framedrop_period;
 	}
 
 	msm_isp_cfg_framedrop_reg(stream_info);
@@ -2612,6 +2619,7 @@ int msm_isp_axi_reset(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	uint32_t bufq_handle = 0, bufq_id = 0;
 	struct msm_isp_timestamp timestamp;
+	struct msm_vfe_frame_request_queue *queue_req;
 	unsigned long flags;
 	int vfe_idx;
 
@@ -2648,8 +2656,18 @@ int msm_isp_axi_reset(struct vfe_device *vfe_dev,
 					VFE_PING_FLAG);
 		msm_isp_cfg_stream_scratch(stream_info,
 					VFE_PONG_FLAG);
+		stream_info->undelivered_request_cnt = 0;
 		spin_unlock_irqrestore(&stream_info->lock,
 					flags);
+		while (!list_empty(&stream_info->request_q)) {
+			queue_req = list_first_entry_or_null(
+				&stream_info->request_q,
+				struct msm_vfe_frame_request_queue, list);
+			if (queue_req) {
+				queue_req->cmd_used = 0;
+				list_del(&queue_req->list);
+			}
+		}
 		for (bufq_id = 0; bufq_id < VFE_BUF_QUEUE_MAX;
 			bufq_id++) {
 			bufq_handle = stream_info->bufq_handle[bufq_id];
@@ -2941,12 +2959,14 @@ static void __msm_isp_stop_axi_streams(struct vfe_device *vfe_dev,
 		 * those state transitions instead of directly forcing stream to
 		 * be INACTIVE
 		 */
+		memset(&stream_info->sw_skip, 0,
+			sizeof(struct msm_isp_sw_framskip));
 		intf = SRC_TO_INTF(stream_info->stream_src);
 		if (stream_info->lpm_mode == 0 &&
 			stream_info->state != PAUSED) {
 			while (stream_info->state != ACTIVE)
 				__msm_isp_axi_stream_update(stream_info,
-						&timestamp);
+					&timestamp);
 		}
 		msm_isp_cfg_stream_scratch(stream_info, VFE_PING_FLAG);
 		msm_isp_cfg_stream_scratch(stream_info, VFE_PONG_FLAG);

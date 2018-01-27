@@ -1572,6 +1572,9 @@ static int diagfwd_mux_write_done(unsigned char *buf, int len, int buf_ctxt,
 	switch (type) {
 	case TYPE_DATA:
 		if (peripheral >= 0 && peripheral < NUM_PERIPHERALS) {
+			DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
+			"Marking buffer as free after write done p: %d, t: %d, buf_num: %d\n",
+				peripheral, type, num);
 			diagfwd_write_done(peripheral, type, num);
 			diag_ws_on_copy(DIAG_WS_MUX);
 		} else if (peripheral == APPS_DATA) {
@@ -1625,6 +1628,7 @@ int diagfwd_init(void)
 	driver->supports_separate_cmdrsp = 1;
 	driver->supports_apps_hdlc_encoding = 1;
 	driver->supports_apps_header_untagging = 1;
+	driver->supports_pd_buffering = 1;
 	for (i = 0; i < NUM_PERIPHERALS; i++)
 		driver->peripheral_untag[i] = 0;
 	mutex_init(&driver->diag_hdlc_mutex);
@@ -1655,12 +1659,16 @@ int diagfwd_init(void)
 		driver->feature[i].stm_support = DISABLE_STM;
 		driver->feature[i].rcvd_feature_mask = 0;
 		driver->feature[i].peripheral_buffering = 0;
+		driver->feature[i].pd_buffering = 0;
 		driver->feature[i].encode_hdlc = 0;
 		driver->feature[i].untag_header =
 			DISABLE_PKT_HEADER_UNTAGGING;
 		driver->feature[i].mask_centralization = 0;
 		driver->feature[i].log_on_demand = 0;
 		driver->feature[i].sent_feature_mask = 0;
+	}
+
+	for (i = 0; i < NUM_MD_SESSIONS; i++) {
 		driver->buffering_mode[i].peripheral = i;
 		driver->buffering_mode[i].mode = DIAG_BUFFERING_MODE_STREAMING;
 		driver->buffering_mode[i].high_wm_val = DEFAULT_HIGH_WM_VAL;
