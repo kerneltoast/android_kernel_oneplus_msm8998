@@ -1205,7 +1205,7 @@ tc_qdisc_flow_control(struct net_device *dev, u32 tcm_handle, int enable_flow)
 				  __func__, "not support change() operation");
 		}
 	} else {
-		WARN_ONCE(1, "%s(): called on bad queue", __func__);
+		pr_warn_once("%s(): called on bad queue", __func__);
 	}
 	return qdisc_len;
 }
