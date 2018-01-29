@@ -50,7 +50,6 @@
 
 #include <linux/input/mt.h>
 
-#include "synaptics_redremote.h"
 #include "synaptics_baseline.h"
 
 /*------------------------------------------------Global Define--------------------------------------------*/
@@ -339,7 +338,6 @@ struct synaptics_ts_data {
 	int support_hw_poweroff;
 	int enable2v8_gpio;
 	int max_num;
-	int enable_remote;
 	int regulator_vdd_vmin;
 	int regulator_vdd_vmax;
 	int regulator_vdd_current;
