@@ -70,7 +70,6 @@
 #define TPD_DEVICE "synaptics,s3320"
 
 #define SUPPORT_GESTURE
-#define SUPPORT_VIRTUAL_KEY
 
 #define TP_FW_NAME_MAX_LEN 128
 
@@ -341,6 +340,13 @@ struct synaptics_ts_data {
 	int enable2v8_gpio;
 	int max_num;
 	int enable_remote;
+	int regulator_vdd_vmin;
+	int regulator_vdd_vmax;
+	int regulator_vdd_current;
+	int regulator_avdd_vmin;
+	int regulator_avdd_vmax;
+	int regulator_avdd_current;
+
 	uint32_t irq_flags;
 	uint32_t max_x;
 	uint32_t max_y;
@@ -375,9 +381,6 @@ struct synaptics_ts_data {
 	char test_limit_name[TP_FW_NAME_MAX_LEN];
 	char fw_id[12];
 	char manu_name[10];
-#ifdef SUPPORT_VIRTUAL_KEY
-        struct kobject *properties_kobj;
-#endif
 
 	struct work_struct pm_work;
 
@@ -385,8 +388,6 @@ struct synaptics_ts_data {
 	spinlock_t isr_lock;
 	bool i2c_awake;
 	struct completion i2c_resume;
-
-	bool touch_active;
 };
 
 static void touch_enable(struct synaptics_ts_data *ts)
@@ -827,13 +828,6 @@ static void synaptics_get_coordinate_point(struct synaptics_ts_data *ts)
 		(coordinate_buf[24] & 0x20) ? 0 : 2; // 1--clockwise, 0--anticlockwise, not circle, report 2
 }
 
-bool s3320_touch_active(void)
-{
-	struct synaptics_ts_data *ts = ts_g;
-
-	return ts ? ts->touch_active : false;
-}
-
 static void gesture_judge(struct synaptics_ts_data *ts)
 {
 	unsigned int keyCode = KEY_F4;
@@ -1085,8 +1079,6 @@ static irqreturn_t synaptics_irq_thread_fn(int irq, void *dev_id)
 
 	if (ret & 0x400) {
 		bool finger_present = int_touch(ts, now);
-
-		ts->touch_active = finger_present;
 
 		/* All fingers up; do get base once */
 		if (!get_tp_base && !finger_present) {
@@ -2187,7 +2179,8 @@ static int synaptics_parse_dts(struct device *dev, struct synaptics_ts_data *ts)
 	int rc;
 	struct device_node *np;
 	int temp_array[2];
-
+	u32 voltage_supply[2];
+	u32 current_supply;
 
 	np = dev->of_node;
 	ts->irq_gpio = of_get_named_gpio_flags(np, "synaptics,irq-gpio", 0, &(ts->irq_flags));
@@ -2268,11 +2261,57 @@ static int synaptics_parse_dts(struct device *dev, struct synaptics_ts_data *ts)
 		rc = PTR_ERR(ts->vdd_2v8);
 		TPD_DEBUG("Regulator get failed vdd rc=%d\n", rc);
 	}
+	rc = of_property_read_u32(np,"synaptics,avdd-current", &current_supply);
+	if (rc < 0) {
+		TPD_ERR("%s: Failed to get regulator vdd current\n",__func__);
+
+	}
+	ts->regulator_vdd_current = current_supply;
+
+	rc = regulator_set_load(ts->vdd_2v8,ts->regulator_vdd_current);
+	if (rc < 0) {
+		TPD_ERR("%s: Failed to set regulator current vdd\n",__func__);
+	}
+
+	rc = of_property_read_u32_array(np, "synaptics,avdd-voltage", voltage_supply, 2);
+	if (rc < 0) {
+		TPD_ERR("%s: Failed to get regulator vdd voltage\n",__func__);
+	}
+	ts->regulator_vdd_vmin = voltage_supply[0];
+	ts->regulator_vdd_vmax = voltage_supply[1];
+
+	rc = regulator_set_voltage(ts->vdd_2v8,ts->regulator_vdd_vmin,ts->regulator_vdd_vmax);
+	if (rc < 0) {
+		TPD_ERR("%s:00Failed to set regulator voltage vdd\n",__func__);
+	}
 
 	ts->vcc_i2c_1v8 = regulator_get(&ts->client->dev, "vcc_i2c_1v8");
 	if( IS_ERR(ts->vcc_i2c_1v8) ){
 		rc = PTR_ERR(ts->vcc_i2c_1v8);
 		TPD_DEBUG("Regulator get failed vcc_i2c rc=%d\n", rc);
+	}
+
+	rc = of_property_read_u32(np,"synaptics,vdd-current", &current_supply);
+	if (rc < 0) {
+		TPD_ERR("%s: Failed to get regulator vdd current\n",__func__);
+	}
+	ts->regulator_vdd_current = current_supply;
+
+	rc = regulator_set_load(ts->vcc_i2c_1v8,ts->regulator_vdd_current);
+	if (rc < 0) {
+		TPD_ERR("%s: Failed to set regulator current vdd\n",__func__);
+	}
+
+	rc = of_property_read_u32_array(np, "synaptics,vdd-voltage", voltage_supply, 2);
+	if (rc < 0) {
+		TPD_ERR("%s: Failed to get regulator vdd voltage\n",__func__);
+	}
+	ts->regulator_vdd_vmin = voltage_supply[0];
+	ts->regulator_vdd_vmax = voltage_supply[1];
+
+	rc = regulator_set_voltage(ts->vcc_i2c_1v8,ts->regulator_vdd_vmin,ts->regulator_vdd_vmax);
+	if (rc < 0) {
+		TPD_ERR("%s:00Failed to set regulator voltage vdd\n",__func__);
 	}
 
 	if( ts->reset_gpio > 0){
@@ -2350,7 +2389,6 @@ static void synaptics_suspend_resume(struct work_struct *work)
 		int i;
 
 		touch_disable(ts);
-		ts->touch_active = false;
 
 		for (i = 0; i < 10; i++) {
 			input_mt_slot(ts->input_dev, i);
@@ -2377,61 +2415,6 @@ static void synaptics_suspend_resume(struct work_struct *work)
 	}
 	mutex_unlock(&ts->mutex);
 }
-
-#ifdef SUPPORT_VIRTUAL_KEY
-#define VK_KEY_X    180
-#define VK_CENTER_Y 2020//2260
-#define VK_WIDTH    170
-#define VK_HIGHT    200
-static ssize_t vk_syna_show(struct kobject *kobj,
-        struct kobj_attribute *attr, char *buf)
-{
-    int len ;
-
-    len =  sprintf(buf,
-            __stringify(EV_KEY) ":" __stringify(KEY_APPSELECT)  ":%d:%d:%d:%d"
-            ":" __stringify(EV_KEY) ":" __stringify(KEY_HOMEPAGE)  ":%d:%d:%d:%d"
-            ":" __stringify(EV_KEY) ":" __stringify(KEY_BACK)  ":%d:%d:%d:%d" "\n",
-            VK_KEY_X,   VK_CENTER_Y, VK_WIDTH, VK_HIGHT,
-            VK_KEY_X*3, VK_CENTER_Y, VK_WIDTH, VK_HIGHT,
-            VK_KEY_X*5, VK_CENTER_Y, VK_WIDTH, VK_HIGHT);
-
-    return len ;
-}
-
-static struct kobj_attribute vk_syna_attr = {
-    .attr = {
-        .name = "virtualkeys."TPD_DEVICE,
-        .mode = S_IRUGO,
-    },
-    .show = &vk_syna_show,
-};
-
-static struct attribute *syna_properties_attrs[] = {
-    &vk_syna_attr.attr,
-    NULL
-};
-
-static struct attribute_group syna_properties_attr_group = {
-    .attrs = syna_properties_attrs,
-};
-static int synaptics_ts_init_virtual_key(struct synaptics_ts_data *ts )
-{
-    int ret = 0;
-
-    /* virtual keys */
-    if(ts->properties_kobj)
-        return 0 ;
-    ts->properties_kobj = kobject_create_and_add("board_properties", NULL);
-    if (ts->properties_kobj)
-        ret = sysfs_create_group(ts->properties_kobj, &syna_properties_attr_group);
-
-    if (!ts->properties_kobj || ret)
-        printk("%s: failed to create board_properties\n", __func__);
-    /* virtual keys */
-    return ret;
-}
-#endif
 
 static int synaptics_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
@@ -2507,7 +2490,7 @@ static int synaptics_ts_probe(struct i2c_client *client, const struct i2c_device
 		strcpy(ts->fw_name,"tp/fw_synaptics_15801b.img");
 		version_is_s3508 = 0;
 	}else{
-		strcpy(ts->fw_name,"tp/fw_synaptics_15811.img");
+		strcpy(ts->fw_name,"tp/fw_synaptics_17801.img");
 		version_is_s3508 = 1;
 	}
 
@@ -2586,9 +2569,6 @@ static int synaptics_ts_probe(struct i2c_client *client, const struct i2c_device
 		goto exit_init_failed;
 	}
 
-#ifdef SUPPORT_VIRTUAL_KEY
-    synaptics_ts_init_virtual_key(ts);
-#endif
 	init_synaptics_proc();
 	TPDTM_DMESG("synaptics_ts_probe 3203: normal end\n");
 	return 0;
