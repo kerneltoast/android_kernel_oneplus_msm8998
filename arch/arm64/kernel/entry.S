@@ -211,6 +211,16 @@ alternative_else_nop_endif
 	.if	\el == 0
 	ldr	x23, [sp, #S_SP]		// load return stack pointer
 	msr	sp_el0, x23
+#ifdef CONFIG_MACH_MSM8998_DUMPLING
+	tbz	x22, #4, 1f
+#ifdef CONFIG_PID_IN_CONTEXTIDR
+	mrs	x29, contextidr_el1
+	msr	contextidr_el1, x29
+#else
+	msr contextidr_el1, xzr
+#endif
+1:
+#else
 #ifdef CONFIG_ARM64_ERRATUM_845719
 alternative_if_not ARM64_WORKAROUND_845719
 	nop
@@ -228,6 +238,7 @@ alternative_else
 #endif
 1:
 alternative_endif
+#endif
 #endif
 	.endif
 
