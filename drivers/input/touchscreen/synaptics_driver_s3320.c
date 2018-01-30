@@ -52,20 +52,6 @@
 
 #include "synaptics_baseline.h"
 
-/*------------------------------------------------Global Define--------------------------------------------*/
-
-#define TP_UNKNOWN 0
-#define TP_G2Y 1
-#define TP_TPK 2
-#define TP_TRULY 3
-#define TP_OFILM 4
-#define TP_JDI_TPK 6
-
-#define DiagonalUpperLimit  1100
-#define DiagonalLowerLimit  900
-
-#define PAGESIZE 512
-
 #define TPD_DEVICE "synaptics,s3320"
 
 #define SUPPORT_GESTURE
@@ -165,7 +151,6 @@ static int gesture_switch = 0;
 	}while(0)
 
 /*---------------------------------------------Global Variable----------------------------------------------*/
-static int TP_FW;
 static unsigned int tp_debug = 0;
 static int button_map[3];
 static int tx_rx_num[2];
@@ -262,7 +247,6 @@ static int F34_FLASH_CTRL00;
 static int F51_CUSTOM_CTRL00;
 static int F51_CUSTOM_DATA04;
 static int F51_CUSTOM_DATA11;
-static int version_is_s3508=0;
 
 /*------------------------------------------Fuction Declare----------------------------------------------*/
 static int synaptics_i2c_suspend(struct device *dev);
@@ -832,10 +816,7 @@ static void gesture_judge(struct synaptics_ts_data *ts)
 	int ret = 0,gesture_sign, regswipe;
 	uint8_t gesture_buffer[10];
 	unsigned char reportbuf[3];
-        if(version_is_s3508)
-		F12_2D_DATA04 = 0x0008;
-	else
- 		F12_2D_DATA04 = 0x000A;
+        F12_2D_DATA04 = 0x0008;
 	TPD_DEBUG("%s start!\n",__func__);
 	ret = synaptics_rmi4_i2c_write_byte(ts->client, 0xff, 0x00);
 	if (ret < 0) {
@@ -844,16 +825,8 @@ static void gesture_judge(struct synaptics_ts_data *ts)
 	ret = i2c_smbus_write_byte_data(ts->client, 0xff, 0x00);
 	ret = i2c_smbus_read_i2c_block_data(ts->client,  F12_2D_DATA04, 5, &(gesture_buffer[0]));
 	ret = i2c_smbus_write_byte_data(ts->client, 0xff, 0x4);
-	if(version_is_s3508)
-		regswipe = i2c_smbus_read_byte_data(ts->client, F51_CUSTOM_DATA04+0x18);
-	else
-		regswipe = i2c_smbus_read_byte_data(ts->client, F51_CUSTOM_DATA04+0x18);
-	if(version_is_s3508)
-		TPD_DEBUG("s35080Gesture Type[0x%x]=[0x%x],lpwg Swipe ID[0x4%x] = [0x%x]\n",\
-		F12_2D_DATA04,gesture_buffer[0],(F51_CUSTOM_DATA04+0x18),regswipe);
-	else
-		TPD_DEBUG("Gesture Type[0x%x]=[0x%x],lpwg Swipe ID[0x4%x] = [0x%x]\n",\
-		F12_2D_DATA04,gesture_buffer[0],(F51_CUSTOM_DATA04+0x18),regswipe);
+	regswipe = i2c_smbus_read_byte_data(ts->client, F51_CUSTOM_DATA04+0x18);
+
 	ret = i2c_smbus_write_byte_data(ts->client, 0xff, 0x00);
 	gesture_sign = gesture_buffer[0];
 	//detect the gesture mode
@@ -862,23 +835,13 @@ static void gesture_judge(struct synaptics_ts_data *ts)
 			    gesture = DouTap;
 			break;
 		case SWIPE_DETECT:
-			if(version_is_s3508){
-				gesture =   (regswipe == 0x41) ? Left2RightSwip   :
-					(regswipe == 0x42) ? Right2LeftSwip   :
-					(regswipe == 0x44) ? Up2DownSwip      :
-					(regswipe == 0x48) ? Down2UpSwip      :
-					(regswipe == 0x80) ? DouSwip          :
-					UnkownGestrue;
-				break;
-			}else{
-				gesture = (regswipe == 0x41) ? Left2RightSwip   :
-					(regswipe == 0x42) ? Right2LeftSwip   :
-					(regswipe == 0x44) ? Up2DownSwip      :
-					(regswipe == 0x48) ? Down2UpSwip      :
-					(regswipe == 0x84) ? DouSwip          :
-					UnkownGestrue;
-				break;
-			}
+			gesture =   (regswipe == 0x41) ? Left2RightSwip   :
+				(regswipe == 0x42) ? Right2LeftSwip   :
+				(regswipe == 0x44) ? Up2DownSwip      :
+				(regswipe == 0x48) ? Down2UpSwip      :
+				(regswipe == 0x80) ? DouSwip          :
+				UnkownGestrue;
+			break;
 		case CIRCLE_DETECT:
 			    gesture = Circle;
 			break;
@@ -1096,7 +1059,7 @@ exit:
 static ssize_t tp_gesture_read_func(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
 {
 	int ret = 0;
-	char page[PAGESIZE];
+	char page[512];
 	struct synaptics_ts_data *ts = ts_g;
 	if(!ts)
 		return ret;
@@ -1142,7 +1105,7 @@ static ssize_t tp_gesture_write_func(struct file *file, const char __user *buffe
 static ssize_t coordinate_proc_read_func(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
 {
 	int ret = 0;
-	char page[PAGESIZE];
+	char page[512];
 	TPD_ERR("%s:gesture_upload = %d \n",__func__,gesture_upload);
 	ret = snprintf(page, sizeof(page), "%d,%d:%d,%d:%d,%d:%d,%d:%d,%d:%d,%d:%d,%d\n", gesture_upload,
 			Point_start.x, Point_start.y, Point_end.x, Point_end.y,
@@ -1157,7 +1120,7 @@ static ssize_t coordinate_proc_read_func(struct file *file, char __user *user_bu
 static ssize_t gesture_switch_read_func(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
 {
 	int ret = 0;
-	char page[PAGESIZE];
+	char page[512];
 	struct synaptics_ts_data *ts = ts_g;
 	if(!ts)
 		return ret;
@@ -1325,29 +1288,6 @@ static int synaptics_input_init(struct synaptics_ts_data *ts)
 }
 
 #include "fw_update_v7.if"
-static int check_hardware_version(struct device *dev)
-{
-        int ret;
-	struct synaptics_ts_data *ts = dev_get_drvdata(dev);
-        const struct firmware *fw = NULL;
-	if(!ts->client) {
-		TPD_ERR("i2c client point is NULL\n");
-		return 0;
-	}
-	ret = request_firmware(&fw, ts->fw_name, dev);
-	if (ret < 0) {
-		TPD_ERR("Request firmware failed - %s (%d)\n",ts->fw_name, ret);
-		return ret;
-	}
-
-        ret = fwu_start_reflash_check(fw->data,ts->client);
-	release_firmware(fw);
-        if (ret < 0)
-		return -1;
-        else
-            	return ret;
-}
-static int check_version = 0;
 /*********************FW Update Func******************************************/
 static int synatpitcs_fw_update(struct device *dev, bool force)
 {
@@ -1358,52 +1298,16 @@ static int synatpitcs_fw_update(struct device *dev, bool force)
 	uint8_t buf[4];
 	uint32_t CURRENT_FIRMWARE_ID = 0 ;
 
-        static bool check_onetime = true;
-
         TPD_DEBUG("%s is called\n",__func__);
 	if(!ts->client) {
 		TPD_ERR("i2c client point is NULL\n");
 		return 0;
 	}
-	if (!strncmp(ts->manu_name,"S3718",5)){
-		if(check_onetime){
-			check_onetime = false;
-			check_version = check_hardware_version(dev);
-			TPD_ERR("%s:first check hardware version %d\n",__func__,check_version);
-			if(check_version < 0){
-				TPD_ERR("checkversion fail....\n");
-				return -1;
-			}
-		}
 
-		if(1 == check_version ) {
-			TPD_DEBUG("enter version 15801 update mode\n");
-			strcpy(ts->fw_name,"tp/fw_synaptics_15801.img");
-			ret = request_firmware(&fw, ts->fw_name, dev);
-			if (ret < 0) {
-				TPD_ERR("Request firmware failed - %s (%d)\n",ts->fw_name, ret);
-				return ret;
-		       }
-
-		 }else{
-		        TPD_DEBUG("enter version 15801 vb update mode\n");
-			ret = request_firmware(&fw, ts->fw_name, dev);
-			if (ret < 0) {
-				TPD_ERR("Request firmware failed - %s (%d)\n",ts->fw_name, ret);
-				return ret;
-		       }
-		}
-
-	}else if(!strncmp(ts->manu_name,"S3508",5) || !strncmp(ts->manu_name,"15811",5) || !strncmp(ts->manu_name,"s3508",5)){
-		        TPD_ERR("enter version 15811 update mode\n");
-			ret = request_firmware(&fw, ts->fw_name, dev);
-			if (ret < 0) {
-				TPD_ERR("Request firmware failed - %s (%d)\n",ts->fw_name, ret);
-				return ret;
-		       }
-	}else{
-		TPD_ERR("firmware name not match\n");
-		return -1;
+	ret = request_firmware(&fw, ts->fw_name, dev);
+	if (ret < 0) {
+		TPD_ERR("Request firmware failed - %s (%d)\n",ts->fw_name, ret);
+		return ret;
 	}
 
 	ret = synapitcs_ts_update(ts->client, fw->data, fw->size, force);
@@ -1447,18 +1351,6 @@ static ssize_t synaptics_update_fw_store(struct device *dev,
 		TPD_ERR("power off firmware abort!\n");
 		return size;
 	}
-	if(version_is_s3508){
-		if (strncmp(ts->manu_name,"S3508",5) && strncmp(ts->manu_name,"15811",5) && strncmp(ts->manu_name,"s3508",5)){
-        		TPD_ERR("product name[%s] do not update!\n",ts->manu_name);
-        		return size;
-   		 }
-	}else{
-    		if (strncmp(ts->manu_name,"S3718",5)){
-        		TPD_ERR("product name[%s] do not update!\n",ts->manu_name);
-        		return size;
-   		 }
-	}
-	TPD_ERR("start update ******* fw_name:%s,ts->manu_name:%s\n",ts->fw_name,ts->manu_name);
 
 	if (size > 2)
 		return -EINVAL;
@@ -1668,30 +1560,6 @@ static int init_synaptics_proc(void)
 #define SYNAPTICS_RMI4_PRODUCT_ID_SIZE 10
 #define SYNAPTICS_RMI4_PRODUCT_INFO_SIZE 2
 
-static void re_scan_PDT(struct i2c_client *client)
-{
-	uint8_t buf[8];
-	i2c_smbus_read_i2c_block_data(client, 0xE9, 6,  buf);
-	SynaF34DataBase = buf[3];
-	SynaF34QueryBase = buf[0];
-	i2c_smbus_read_i2c_block_data(client, 0xE3, 6,  buf);
-	SynaF01DataBase = buf[3];
-	SynaF01CommandBase = buf[1];
-	i2c_smbus_read_i2c_block_data(client, 0xDD, 6,  buf);
-
-	SynaF34Reflash_BlockNum = SynaF34DataBase;
-	SynaF34Reflash_BlockData = SynaF34DataBase + 1;
-	SynaF34ReflashQuery_BootID = SynaF34QueryBase;
-	SynaF34ReflashQuery_FlashPropertyQuery = SynaF34QueryBase + 1;
-	SynaF34ReflashQuery_FirmwareBlockSize = SynaF34QueryBase + 2;
-	SynaF34ReflashQuery_FirmwareBlockCount = SynaF34QueryBase +3;
-	SynaF34ReflashQuery_ConfigBlockSize = SynaF34QueryBase + 3;
-	SynaF34ReflashQuery_ConfigBlockCount = SynaF34QueryBase + 3;
-	i2c_smbus_read_i2c_block_data(client, SynaF34ReflashQuery_FirmwareBlockSize, 2, buf);
-	SynaFirmwareBlockSize = buf[0] | (buf[1] << 8);
-	TPD_DEBUG("SynaFirmwareBlockSize 3310 is %d\n", SynaFirmwareBlockSize);
-	SynaF34_FlashControl = SynaF34DataBase + 2;
-}
 struct image_header {
 	/* 0x00 - 0x0f */
 	unsigned char checksum[4];
@@ -1877,222 +1745,105 @@ static int synapitcs_ts_update(struct i2c_client *client, const uint8_t *data, u
 	TPD_DEBUG("%s is called\n",__func__);
 	if(!client)
 		return -1;
-	if (!strncmp(ts->manu_name,"S3718",5)){
-		Config_Data = data + 0x8f0;
-		ret = synaptics_rmi4_i2c_write_byte(client, 0xff, 0x0);
-		ret = synaptics_rmi4_i2c_read_block(client, F34_FLASH_CTRL00, 4, buf);
-		CURRENT_FIRMWARE_ID = (buf[0]<<24)|(buf[1]<<16)|(buf[2]<<8)|buf[3];
-		FIRMWARE_ID = (Config_Data[0]<<24)|(Config_Data[1]<<16)|(Config_Data[2]<<8)|Config_Data[3];
-		if(1 == check_version)
-			TPD_ERR("15801CURRENT_FW_ID:%x----, FW_ID:%x----,FW_NAME:%s\n", CURRENT_FIRMWARE_ID, FIRMWARE_ID,ts->fw_name);
-		else
-			TPD_ERR("15801CURRENT_FW_ID:%xvB----, FW_ID:%xvB----,FW_NAME:%s\n", CURRENT_FIRMWARE_ID, FIRMWARE_ID,ts->fw_name);
-		//TPD_ERR("synaptics force is %d\n", force);
-		if(!force) {
-			if(CURRENT_FIRMWARE_ID == FIRMWARE_ID) {
-				return 0;
-			}
-		}
-		ret = fwu_start_reflash(data,client);
-		if (ret){
-			return -1;
-		}
-	}else if(!strncmp(ts->manu_name,"S3508",5) || !strncmp(ts->manu_name,"15811",5) || !strncmp(ts->manu_name,"s3508",5)){
+
 		parse_header(&header,data);
-		if((header.firmware_size + header.config_size + 0x100) > data_len) {
-			TPDTM_DMESG("firmware_size + config_size + 0x100 > data_len data_len = %d \n",data_len);
-			return -1;
-		}
-		Firmware_Data = data + 0x100;
-		Config_Data = Firmware_Data + header.firmware_size;
-		ret = i2c_smbus_write_byte_data(client, 0xff, 0x0);
-
-		ret = i2c_smbus_read_i2c_block_data(client, F34_FLASH_CTRL00, 4, buf);
-		CURRENT_FIRMWARE_ID = (buf[0]<<24)|(buf[1]<<16)|(buf[2]<<8)|buf[3];
-		FIRMWARE_ID = (Config_Data[0]<<24)|(Config_Data[1]<<16)|(Config_Data[2]<<8)|Config_Data[3];
-		TPD_ERR("15811CURRENT_FW_ID:%x----, FW_ID:%x----,FW_NAME:%s\n", CURRENT_FIRMWARE_ID, FIRMWARE_ID,ts->fw_name);
-		TPD_ERR("synaptics force is %d\n", force);
-		if(!force) {
-			if(CURRENT_FIRMWARE_ID == FIRMWARE_ID) {
-				return 0;
-			}
-		}
-		re_scan_PDT_s3508(client);
-		block = 16;
-		TPD_DEBUG("block is %d \n",block);
-		firmware = (header.firmware_size)/16;
-		TPD_DEBUG("firmware is %d \n",firmware);
-		configuration = (header.config_size)/16;
-		TPD_DEBUG("configuration is %d \n",configuration);
-
-		ret = i2c_smbus_read_i2c_block_data(client, SynaF34ReflashQuery_BootID, 8, &(bootloder_id[0]));
-		TPD_DEBUG("bootloader id is %x \n",(bootloder_id[1] << 8)|bootloder_id[0]);
-		ret=i2c_smbus_write_i2c_block_data(client, SynaF34Reflash_BlockData, 2, &(bootloder_id[0x0]));
-		TPD_DEBUG("Write bootloader id SynaF34_FlashControl is 0x00%x ret is %d\n",SynaF34_FlashControl,ret);
-
-		i2c_smbus_write_byte_data(client,SynaF34_FlashControl,0x0F);
-		msleep(10);
-		TPD_DEBUG("attn step 4\n");
-		ret=checkFlashState(client);
-		if(ret > 0) {
-			TPD_ERR("Get in prog:The status(Image) of flashstate is %x\n",ret);
-				return -1;
-		}
-		ret = i2c_smbus_read_byte_data(client,0x04);
-		TPD_DEBUG("The status(device state) is %x\n",ret);
-		ret= i2c_smbus_read_byte_data(client,F01_RMI_CTRL_BASE);
-		TPD_DEBUG("The status(control f01_RMI_CTRL_DATA) is %x\n",ret);
-		ret= i2c_smbus_write_byte_data(client,F01_RMI_CTRL_BASE,ret&0x04);
-		/********************get into prog end************/
-		ret=i2c_smbus_write_i2c_block_data(client, SynaF34Reflash_BlockData, 2, &(bootloder_id[0x0]));
-		TPD_DEBUG("ret is %d\n",ret);
-		re_scan_PDT_s3508(client);
-		i2c_smbus_read_i2c_block_data(client,SynaF34ReflashQuery_BootID,2,buf);
-		i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockData,2,buf);
-		i2c_smbus_write_byte_data(client,SynaF34_FlashControl,0x03);
-		msleep(2500);
-		ret = i2c_smbus_read_byte_data(client, SynaF34_FlashControl);
-		if(ret != 0x00)
-			msleep(2000);
-		ret = i2c_smbus_read_byte_data(client,SynaF34_FlashControl+1);
-		TPDTM_DMESG("The status(erase) is %x\n",ret);
-		TPD_ERR("15811update-----------------update------------------update!\n");
-		TPD_DEBUG("cnt %d\n",firmware);
-		for(j=0; j<firmware; j++) {
-			buf[0]=j&0x00ff;
-			buf[1]=(j&0xff00)>>8;
-			i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockNum,2,buf);
-			i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockData,16,&Firmware_Data[j*16]);
-
-			i2c_smbus_write_byte_data(client,SynaF34_FlashControl,0x02);
-			ret=checkFlashState(client);
-			if(ret > 0) {
-				TPD_ERR("Firmware:The status(Image) of flash data3 is %x,time =%d\n",ret,j);
-				return -1;
-			}
-		}
-		//step 7 configure data
-		//TPD_ERR("going to flash configuration area\n");
-		//TPD_ERR("header.firmware_size is 0x%x\n", header.firmware_size);
-		//TPD_ERR("bootloader_size is 0x%x\n", bootloader_size);
-		for(j=0;j<configuration;j++) {
-			//a)write SynaF34Reflash_BlockNum to access
-			buf[0]=j&0x00ff;
-			buf[1]=(j&0xff00)>>8;
-			i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockNum,2,buf);
-			//b) write data
-
-				i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockData,16,&Config_Data[j*16]);
-
-			//c) issue write
-			i2c_smbus_write_byte_data(client,SynaF34_FlashControl,0x06);
-			//d) wait attn
-			ret = checkFlashState(client);
-			if(ret > 0) {
-				TPD_ERR("Configuration:The status(Image) of flash data3 is %x,time =%d\n",ret,j);
-				return -1;
-			}
-		}
-		//step 1 issue reset
-		i2c_smbus_write_byte_data(client,SynaF01CommandBase,0X01);
-	}else{
-		parse_header(&header,data);
-		if((header.firmware_size + header.config_size + 0x100) > data_len) {
-			TPDTM_DMESG("firmware_size + config_size + 0x100 > data_len data_len = %d \n",data_len);
-			return -1;
-		}
-
-		Firmware_Data = data + 0x100;
-		Config_Data = Firmware_Data + header.firmware_size;
-		ret = synaptics_rmi4_i2c_write_byte(client, 0xff, 0x0);
-
-		ret = synaptics_rmi4_i2c_read_block(client, F34_FLASH_CTRL00, 4, buf);
-		CURRENT_FIRMWARE_ID = (buf[0]<<24)|(buf[1]<<16)|(buf[2]<<8)|buf[3];
-		FIRMWARE_ID = (Config_Data[0]<<24)|(Config_Data[1]<<16)|(Config_Data[2]<<8)|Config_Data[3];
-
-		//TPD_ERR("synaptics force is %d\n", force);
-		if(!force) {
-			if(CURRENT_FIRMWARE_ID == FIRMWARE_ID) {
-				return 0;
-			}
-		}
-		re_scan_PDT(client);
-		block = 16;
-		TPD_DEBUG("block is %d \n",block);
-		firmware = (header.firmware_size)/16;
-		TPD_DEBUG("firmware is %d \n",firmware);
-		configuration = (header.config_size)/16;
-		TPD_DEBUG("configuration is %d \n",configuration);
-
-
-		ret = i2c_smbus_read_i2c_block_data(client, SynaF34ReflashQuery_BootID, 8, &(bootloder_id[0]));
-		TPD_DEBUG("bootloader id is %x \n",(bootloder_id[1] << 8)|bootloder_id[0]);
-		ret=i2c_smbus_write_i2c_block_data(client, SynaF34Reflash_BlockData, 2, &(bootloder_id[0x0]));
-		TPDTM_DMESG("Write bootloader id SynaF34_FlashControl is 0x00%x ret is %d\n",SynaF34_FlashControl,ret);
-
-		synaptics_rmi4_i2c_write_byte(client,SynaF34_FlashControl,0x0F);
-		msleep(10);
-		TPD_DEBUG("attn step 4\n");
-		ret=checkFlashState(client);
-		if(ret > 0) {
-			TPD_ERR("Get in prog:The status(Image) of flashstate is %x\n",ret);
-			return -1;
-		}
-		ret = i2c_smbus_read_byte_data(client,0x04);
-		TPD_DEBUG("The status(device state) is %x\n",ret);
-		ret= i2c_smbus_read_byte_data(client,F01_RMI_CTRL_BASE);
-		TPD_DEBUG("The status(control f01_RMI_CTRL_DATA) is %x\n",ret);
-		ret= i2c_smbus_write_byte_data(client,F01_RMI_CTRL_BASE,ret&0x04);
-		/********************get into prog end************/
-		ret=i2c_smbus_write_i2c_block_data(client, SynaF34Reflash_BlockData, 2, &(bootloder_id[0x0]));
-		TPD_DEBUG("ret is %d\n",ret);
-		re_scan_PDT(client);
-		i2c_smbus_read_i2c_block_data(client,SynaF34ReflashQuery_BootID,2,buf);
-		i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockData,2,buf);
-		i2c_smbus_write_byte_data(client,SynaF34_FlashControl,0x03);
-		msleep(2000);
-		ret = i2c_smbus_read_byte_data(client,SynaF34_FlashControl);
-		TPDTM_DMESG("going to flash firmware area synaF34_FlashControl %d\n",ret);
-
-		TPD_ERR("update-----------------firmware ------------------update!\n");
-		TPD_DEBUG("cnt %d\n",firmware);
-		for(j=0; j<firmware; j++) {
-			buf[0]=j&0x00ff;
-			buf[1]=(j&0xff00)>>8;
-			synaptics_rmi4_i2c_write_block(client,SynaF34Reflash_BlockNum,2,buf);
-			synaptics_rmi4_i2c_write_block(client,SynaF34Reflash_BlockData,16,&Firmware_Data[j*16]);
-			synaptics_rmi4_i2c_write_byte(client,SynaF34_FlashControl,0x02);
-			ret=checkFlashState(client);
-			if(ret > 0) {
-				TPD_ERR("Firmware:The status(Image) of flash data3 is %x,time =%d\n",ret,j);
-				return -1;
-			}
-		}
-		//step 7 configure data
-		//TPD_ERR("going to flash configuration area\n");
-		//TPD_ERR("header.firmware_size is 0x%x\n", header.firmware_size);
-		//TPD_ERR("bootloader_size is 0x%x\n", bootloader_size);
-		TPD_ERR("update-----------------configuration ------------------update!\n");
-		for(j=0;j<configuration;j++) {
-			//a)write SynaF34Reflash_BlockNum to access
-			buf[0]=j&0x00ff;
-			buf[1]=(j&0xff00)>>8;
-			synaptics_rmi4_i2c_write_block(client,SynaF34Reflash_BlockNum,2,buf);
-			//b) write data
-			synaptics_rmi4_i2c_write_block(client,SynaF34Reflash_BlockData,16,&Config_Data[j*16]);
-			//c) issue write
-			synaptics_rmi4_i2c_write_byte(client,SynaF34_FlashControl,0x06);
-			//d) wait attn
-			ret = checkFlashState(client);
-			if(ret > 0) {
-				TPD_ERR("Configuration:The status(Image) of flash data3 is %x,time =%d\n",ret,j);
-				return -1;
-			}
-		}
-
-		//step 1 issue reset
-		synaptics_rmi4_i2c_write_byte(client,SynaF01CommandBase,0x01);
+	if((header.firmware_size + header.config_size + 0x100) > data_len) {
+		TPDTM_DMESG("firmware_size + config_size + 0x100 > data_len data_len = %d \n",data_len);
+		return -1;
 	}
+	Firmware_Data = data + 0x100;
+	Config_Data = Firmware_Data + header.firmware_size;
+	ret = i2c_smbus_write_byte_data(client, 0xff, 0x0);
+
+	ret = i2c_smbus_read_i2c_block_data(client, F34_FLASH_CTRL00, 4, buf);
+	CURRENT_FIRMWARE_ID = (buf[0]<<24)|(buf[1]<<16)|(buf[2]<<8)|buf[3];
+	FIRMWARE_ID = (Config_Data[0]<<24)|(Config_Data[1]<<16)|(Config_Data[2]<<8)|Config_Data[3];
+	TPD_ERR("15811CURRENT_FW_ID:%x----, FW_ID:%x----,FW_NAME:%s\n", CURRENT_FIRMWARE_ID, FIRMWARE_ID,ts->fw_name);
+	TPD_ERR("synaptics force is %d\n", force);
+	if(!force) {
+		if(CURRENT_FIRMWARE_ID == FIRMWARE_ID) {
+			return 0;
+		}
+	}
+	re_scan_PDT_s3508(client);
+	block = 16;
+	TPD_DEBUG("block is %d \n",block);
+	firmware = (header.firmware_size)/16;
+	TPD_DEBUG("firmware is %d \n",firmware);
+	configuration = (header.config_size)/16;
+	TPD_DEBUG("configuration is %d \n",configuration);
+
+	ret = i2c_smbus_read_i2c_block_data(client, SynaF34ReflashQuery_BootID, 8, &(bootloder_id[0]));
+	TPD_DEBUG("bootloader id is %x \n",(bootloder_id[1] << 8)|bootloder_id[0]);
+	ret=i2c_smbus_write_i2c_block_data(client, SynaF34Reflash_BlockData, 2, &(bootloder_id[0x0]));
+	TPD_DEBUG("Write bootloader id SynaF34_FlashControl is 0x00%x ret is %d\n",SynaF34_FlashControl,ret);
+
+	i2c_smbus_write_byte_data(client,SynaF34_FlashControl,0x0F);
+	msleep(10);
+	TPD_DEBUG("attn step 4\n");
+	ret=checkFlashState(client);
+	if(ret > 0) {
+		TPD_ERR("Get in prog:The status(Image) of flashstate is %x\n",ret);
+			return -1;
+	}
+	ret = i2c_smbus_read_byte_data(client,0x04);
+	TPD_DEBUG("The status(device state) is %x\n",ret);
+	ret= i2c_smbus_read_byte_data(client,F01_RMI_CTRL_BASE);
+	TPD_DEBUG("The status(control f01_RMI_CTRL_DATA) is %x\n",ret);
+	ret= i2c_smbus_write_byte_data(client,F01_RMI_CTRL_BASE,ret&0x04);
+	/********************get into prog end************/
+	ret=i2c_smbus_write_i2c_block_data(client, SynaF34Reflash_BlockData, 2, &(bootloder_id[0x0]));
+	TPD_DEBUG("ret is %d\n",ret);
+	re_scan_PDT_s3508(client);
+	i2c_smbus_read_i2c_block_data(client,SynaF34ReflashQuery_BootID,2,buf);
+	i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockData,2,buf);
+	i2c_smbus_write_byte_data(client,SynaF34_FlashControl,0x03);
+	msleep(2500);
+	ret = i2c_smbus_read_byte_data(client, SynaF34_FlashControl);
+	if(ret != 0x00)
+		msleep(2000);
+	ret = i2c_smbus_read_byte_data(client,SynaF34_FlashControl+1);
+	TPDTM_DMESG("The status(erase) is %x\n",ret);
+	TPD_ERR("15811update-----------------update------------------update!\n");
+	TPD_DEBUG("cnt %d\n",firmware);
+	for(j=0; j<firmware; j++) {
+		buf[0]=j&0x00ff;
+		buf[1]=(j&0xff00)>>8;
+		i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockNum,2,buf);
+		i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockData,16,&Firmware_Data[j*16]);
+
+		i2c_smbus_write_byte_data(client,SynaF34_FlashControl,0x02);
+		ret=checkFlashState(client);
+		if(ret > 0) {
+			TPD_ERR("Firmware:The status(Image) of flash data3 is %x,time =%d\n",ret,j);
+			return -1;
+		}
+	}
+	//step 7 configure data
+	//TPD_ERR("going to flash configuration area\n");
+	//TPD_ERR("header.firmware_size is 0x%x\n", header.firmware_size);
+	//TPD_ERR("bootloader_size is 0x%x\n", bootloader_size);
+	for(j=0;j<configuration;j++) {
+		//a)write SynaF34Reflash_BlockNum to access
+		buf[0]=j&0x00ff;
+		buf[1]=(j&0xff00)>>8;
+		i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockNum,2,buf);
+		//b) write data
+
+			i2c_smbus_write_i2c_block_data(client,SynaF34Reflash_BlockData,16,&Config_Data[j*16]);
+
+		//c) issue write
+		i2c_smbus_write_byte_data(client,SynaF34_FlashControl,0x06);
+		//d) wait attn
+		ret = checkFlashState(client);
+		if(ret > 0) {
+			TPD_ERR("Configuration:The status(Image) of flash data3 is %x,time =%d\n",ret,j);
+			return -1;
+		}
+	}
+	//step 1 issue reset
+	i2c_smbus_write_byte_data(client,SynaF01CommandBase,0X01);
+
 	//step2 wait ATTN
 	//msleep(1000);
 	mdelay(1500);
@@ -2112,10 +1863,7 @@ static void synaptics_tpedge_limitfunc(void)
 	int limit_mode=0;
 	int ret;
 
-	if(version_is_s3508)
-		F51_CUSTOM_CTRL74 = 0x0437;
-	else
-		F51_CUSTOM_CTRL74 = 0x044D;
+	F51_CUSTOM_CTRL74 = 0x0437;
 	msleep(60);
         ret = i2c_smbus_write_byte_data(ts_g->client, 0xff, 0x4);
         limit_mode = i2c_smbus_read_byte_data(ts_g->client, F51_CUSTOM_CTRL74);
@@ -2418,9 +2166,6 @@ static int synaptics_ts_probe(struct i2c_client *client, const struct i2c_device
 {
 	struct synaptics_ts_data *ts = NULL;
 	int ret = -1;
-	uint8_t buf[4];
-	uint32_t CURRENT_FIRMWARE_ID = 0;
-	uint32_t bootloader_mode;
 
 	TPD_ERR("%s  is called\n",__func__);
 
@@ -2458,42 +2203,9 @@ static int synaptics_ts_probe(struct i2c_client *client, const struct i2c_device
 		goto err_check_functionality_failed;
 	}
 
-	ret = synaptics_rmi4_i2c_read_byte(client, 0x13);
-	if( ret < 0 ) {
-		ret = synaptics_rmi4_i2c_read_byte(client, 0x13);
-		if( ret < 0 ) {
-                        TPD_ERR("tp is no exist!\n");
-			goto err_check_functionality_failed;
-		}
-	}
-
 	synaptics_read_register_map(ts);
-	bootloader_mode = synaptics_rmi4_i2c_read_byte(ts->client, F01_RMI_DATA_BASE);
 
-	bootloader_mode = bootloader_mode&0x40;
-	TPD_ERR("before fw update bootloader_mode[0x%x]\n", bootloader_mode);
-
-	synaptics_rmi4_i2c_read_block(ts->client, F34_FLASH_CTRL00, 4, buf);
-	CURRENT_FIRMWARE_ID = (buf[0]<<24) | (buf[1]<<16) | (buf[2]<<8) | buf[3];
-	TPD_ERR("CURRENT_FIRMWARE_ID = 0x%x\n", CURRENT_FIRMWARE_ID);
-	TP_FW = CURRENT_FIRMWARE_ID;
-	sprintf(ts->fw_id,"0x%x",TP_FW);
-
-	memset(ts->fw_name, 0, TP_FW_NAME_MAX_LEN);
-	memset(ts->test_limit_name, 0, TP_FW_NAME_MAX_LEN);
-
-	//sprintf(ts->manu_name, "TP_SYNAPTICS");
-	synaptics_rmi4_i2c_read_block(ts->client, F01_RMI_QUERY11,10, ts->manu_name);
-	if (!strncmp(ts->manu_name,"S3718",5)){
-		strcpy(ts->fw_name,"tp/fw_synaptics_15801b.img");
-		version_is_s3508 = 0;
-	}else{
-		strcpy(ts->fw_name,"tp/fw_synaptics_17801.img");
-		version_is_s3508 = 1;
-	}
-
-	strcpy(ts->test_limit_name,"tp/14049/14049_Limit_jdi.img");
-	TPD_DEBUG("0synatpitcs_fw: fw_name = %s,ts->manu_name:%s \n",ts->fw_name,ts->manu_name);
+	strcpy(ts->fw_name,"tp/fw_synaptics_17801.img");
 
 	INIT_WORK(&ts->base_work, tp_baseline_get_work);
 
