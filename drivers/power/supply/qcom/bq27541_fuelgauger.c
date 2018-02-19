@@ -166,8 +166,9 @@ static int bq27541_read(u8 reg, int *rt_value, struct bq27541_device_info *di)
 }
 
 /* Return the battery temperature in tenths of degrees Celsius */
-static int bq27541_battery_temperature(struct bq27541_device_info *di)
+static int bq27541_get_battery_temperature(void)
 {
+	struct bq27541_device_info *di = bq27541_di;
 	int ret, temp;
 
 	ret = bq27541_read(BQ27411_REG_TEMP, &temp, di);
@@ -181,8 +182,9 @@ static int bq27541_battery_temperature(struct bq27541_device_info *di)
 	return di->old_data.temp;
 }
 
-static int bq27541_battery_voltage(struct bq27541_device_info *di)
+static int bq27541_get_battery_mvolts(void)
 {
+	struct bq27541_device_info *di = bq27541_di;
 	int ret, volt;
 
 	ret = bq27541_read(BQ27411_REG_VOLT, &volt, di);
@@ -196,8 +198,9 @@ static int bq27541_battery_voltage(struct bq27541_device_info *di)
 	return di->old_data.mvolts;
 }
 
-static int bq27541_average_current(struct bq27541_device_info *di)
+static int bq27541_get_average_current(void)
 {
+	struct bq27541_device_info *di = bq27541_di;
 	int ret, curr;
 
 	ret = bq27541_read(BQ27411_REG_AI, &curr, di);
@@ -215,8 +218,9 @@ static int bq27541_average_current(struct bq27541_device_info *di)
 	return di->old_data.curr;
 }
 
-static int bq27541_battery_soc(struct bq27541_device_info *di)
+static int bq27541_get_battery_soc(void)
 {
+	struct bq27541_device_info *di = bq27541_di;
 	int ret, soc;
 
 	ret = bq27541_read(BQ27411_REG_SOC, &soc, di);
@@ -273,6 +277,28 @@ static int bq27541_battery_soc(struct bq27541_device_info *di)
 
 	return di->old_data.soc;
 }
+
+static int bq27541_get_batt_remaining_capacity(void)
+{
+	struct bq27541_device_info *di = bq27541_di;
+	int ret, cap;
+
+	ret = bq27541_read(BQ27411_REG_RM, &cap, di);
+	if (ret) {
+		dev_err(di->dev, "error reading cap, ret: %d\n", ret);
+		return 0;
+	}
+
+	return cap;
+}
+
+static struct external_battery_gauge bq27541_batt_gauge = {
+	.get_battery_mvolts		= bq27541_get_battery_mvolts,
+	.get_battery_temperature	= bq27541_get_battery_temperature,
+	.get_battery_soc		= bq27541_get_battery_soc,
+	.get_average_current		= bq27541_get_average_current,
+	.get_batt_remaining_capacity	= bq27541_get_batt_remaining_capacity,
+};
 
 /* I2C-specific code */
 static int bq27541_i2c_txsubcmd(u8 reg, unsigned short subcmd,
@@ -332,52 +358,6 @@ static int bq27541_chip_config(struct bq27541_device_info *di)
 
 	return 0;
 }
-
-static int bq27541_remaining_capacity(struct bq27541_device_info *di)
-{
-	int ret, cap;
-
-	ret = bq27541_read(BQ27411_REG_RM, &cap, di);
-	if (ret) {
-		dev_err(di->dev, "error reading cap, ret: %d\n", ret);
-		return 0;
-	}
-
-	return cap;
-}
-
-static int bq27541_get_battery_mvolts(void)
-{
-	return bq27541_battery_voltage(bq27541_di);
-}
-
-static int bq27541_get_battery_temperature(void)
-{
-	return bq27541_battery_temperature(bq27541_di);
-}
-
-static int bq27541_get_battery_soc(void)
-{
-	return bq27541_battery_soc(bq27541_di);
-}
-
-static int bq27541_get_average_current(void)
-{
-	return bq27541_average_current(bq27541_di);
-}
-
-static int bq27541_get_remaining_capacity(void)
-{
-	return bq27541_remaining_capacity(bq27541_di);
-}
-
-static struct external_battery_gauge bq27541_batt_gauge = {
-	.get_battery_mvolts		= bq27541_get_battery_mvolts,
-	.get_battery_temperature	= bq27541_get_battery_temperature,
-	.get_battery_soc		= bq27541_get_battery_soc,
-	.get_average_current		= bq27541_get_average_current,
-	.get_batt_remaining_capacity	= bq27541_get_remaining_capacity,
-};
 
 static void bq27541_hw_config(struct work_struct *work)
 {
