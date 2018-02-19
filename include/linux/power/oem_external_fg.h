@@ -42,6 +42,7 @@ struct external_battery_gauge {
 	int (*get_adapter_update)(void);
 	bool (*get_fast_chg_ing)	(void);
 	bool (*get_fast_low_temp_full)	(void);
+	void (*set_allow_reading)(bool enable);
 	int (*fast_chg_started_status) (bool status);
 	bool (*get_fastchg_firmware_already_updated) (void);
 };

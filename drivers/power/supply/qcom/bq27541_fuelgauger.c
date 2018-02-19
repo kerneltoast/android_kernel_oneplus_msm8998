@@ -99,10 +99,9 @@
 
 #define BQ27541_CHG_CALIB_CNT   2 /* Num of calibration cycles after charging */
 
-static DEFINE_MUTEX(i2c_read_mutex);
-
 /* Back up and use old data if raw measurement fails */
 struct bq27541_old_data {
+	int cap;
 	int curr;
 	int is_charging;
 	int mvolts;
@@ -115,6 +114,8 @@ struct bq27541_device_info {
 	struct i2c_client		*client;
 	struct delayed_work		hw_config;
 	struct bq27541_old_data		old_data;
+	struct mutex			i2c_read_lock;
+	bool				disable_reading;
 };
 
 static struct bq27541_device_info *bq27541_di;
@@ -158,9 +159,12 @@ static int bq27541_read(u8 reg, int *rt_value, struct bq27541_device_info *di)
 {
 	int ret;
 
-	mutex_lock(&i2c_read_mutex);
-	ret = bq27541_read_i2c(reg, rt_value, di);
-	mutex_unlock(&i2c_read_mutex);
+	mutex_lock(&di->i2c_read_lock);
+	if (di->disable_reading)
+		ret = -EBUSY;
+	else
+		ret = bq27541_read_i2c(reg, rt_value, di);
+	mutex_unlock(&di->i2c_read_lock);
 
 	return ret;
 }
@@ -173,12 +177,11 @@ static int bq27541_get_battery_temperature(void)
 
 	ret = bq27541_read(BQ27411_REG_TEMP, &temp, di);
 	if (ret) {
-		dev_err(di->dev, "error reading temperature, ret: %d\n", ret);
+		dev_dbg(di->dev, "error reading temperature, ret: %d\n", ret);
 		return di->old_data.temp;
 	}
 
 	di->old_data.temp = temp - ZERO_DEGREES_CELSIUS_IN_TENTH_KELVIN;
-
 	return di->old_data.temp;
 }
 
@@ -189,12 +192,11 @@ static int bq27541_get_battery_mvolts(void)
 
 	ret = bq27541_read(BQ27411_REG_VOLT, &volt, di);
 	if (ret) {
-		dev_err(di->dev, "error reading voltage, ret: %d\n", ret);
+		dev_dbg(di->dev, "error reading voltage, ret: %d\n", ret);
 		return di->old_data.mvolts;
 	}
 
 	di->old_data.mvolts = volt * 1000;
-
 	return di->old_data.mvolts;
 }
 
@@ -205,7 +207,7 @@ static int bq27541_get_average_current(void)
 
 	ret = bq27541_read(BQ27411_REG_AI, &curr, di);
 	if (ret) {
-		dev_err(di->dev, "error reading current, ret: %d\n", ret);
+		dev_dbg(di->dev, "error reading current, ret: %d\n", ret);
 		return di->old_data.curr;
 	}
 
@@ -214,7 +216,6 @@ static int bq27541_get_average_current(void)
 		curr = -((~(curr - 1)) & 0xFFFF);
 
 	di->old_data.curr = -curr;
-
 	return di->old_data.curr;
 }
 
@@ -225,7 +226,7 @@ static int bq27541_get_battery_soc(void)
 
 	ret = bq27541_read(BQ27411_REG_SOC, &soc, di);
 	if (ret) {
-		dev_err(di->dev, "error reading SOC, ret: %d\n", ret);
+		dev_dbg(di->dev, "error reading SOC, ret: %d\n", ret);
 		return di->old_data.soc;
 	}
 
@@ -274,7 +275,6 @@ static int bq27541_get_battery_soc(void)
 	}
 
 	di->old_data.soc = soc;
-
 	return di->old_data.soc;
 }
 
@@ -285,11 +285,21 @@ static int bq27541_get_batt_remaining_capacity(void)
 
 	ret = bq27541_read(BQ27411_REG_RM, &cap, di);
 	if (ret) {
-		dev_err(di->dev, "error reading cap, ret: %d\n", ret);
-		return 0;
+		dev_dbg(di->dev, "error reading cap, ret: %d\n", ret);
+		return di->old_data.cap;
 	}
 
-	return cap;
+	di->old_data.cap = cap;
+	return di->old_data.cap;
+}
+
+static void bq27541_set_allow_reading(bool enable)
+{
+	struct bq27541_device_info *di = bq27541_di;
+
+	mutex_lock(&di->i2c_read_lock);
+	di->disable_reading = !enable;
+	mutex_unlock(&di->i2c_read_lock);
 }
 
 static struct external_battery_gauge bq27541_batt_gauge = {
@@ -298,6 +308,7 @@ static struct external_battery_gauge bq27541_batt_gauge = {
 	.get_battery_soc		= bq27541_get_battery_soc,
 	.get_average_current		= bq27541_get_average_current,
 	.get_batt_remaining_capacity	= bq27541_get_batt_remaining_capacity,
+	.set_allow_reading		= bq27541_set_allow_reading,
 };
 
 /* I2C-specific code */
@@ -407,8 +418,9 @@ static int bq27541_battery_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, di);
 	di->dev = &client->dev;
 	di->client = client;
-
 	di->old_data.is_charging = BQ27541_CHG_CALIB_CNT;
+
+	mutex_init(&di->i2c_read_lock);
 
 	bq27541_di = di;
 
