@@ -3114,8 +3114,7 @@ static int fg_psy_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
-		if (get_extern_fg_regist_done() &&
-				chip->use_external_fg && external_fg
+		if (chip->use_external_fg && external_fg
 				&& external_fg->get_battery_soc)
 			pval->intval = external_fg->get_battery_soc();
 		else
@@ -3148,10 +3147,7 @@ static int fg_psy_get_property(struct power_supply *psy,
 		}
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		if (!get_extern_fg_regist_done()
-			&& get_extern_bq_present())
-			pval->intval = DEFALUT_BATT_TEMP;
-		else if (chip->use_external_fg && external_fg
+		if (chip->use_external_fg && external_fg
 				&& external_fg->get_average_current){
 			pval->intval = external_fg->get_battery_temperature();
 			if(pval->intval > 670)
@@ -3220,13 +3216,6 @@ static int fg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_FG_CURRENT_NOW:
 			rc = fg_get_battery_current(chip, &pval->intval);
 		break;
-	case POWER_SUPPLY_PROP_BQ_SOC:
-		if (chip->use_external_fg && external_fg
-			&& external_fg->get_batt_bq_soc)
-			pval->intval = external_fg->get_batt_bq_soc();
-		else
-			pval->intval = 50;
-		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		rc = fg_get_sram_prop(chip, FG_SRAM_VBATT_FULL, &pval->intval);
 		break;
@@ -3243,8 +3232,6 @@ static int fg_psy_get_property(struct power_supply *psy,
 }
 
 static void oem_update_cc_cv_setpoint(struct fg_chip *chip,int cv_float_point);
-static void oneplus_set_allow_read_iic(struct fg_chip *chip,bool status);
-static void oneplus_set_lcd_off_status(struct fg_chip *chip,bool status);
 
 static int fg_psy_set_property(struct power_supply *psy,
 				  enum power_supply_property psp,
@@ -3256,12 +3243,6 @@ static int fg_psy_set_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CC_TO_CV_POINT:
 		oem_update_cc_cv_setpoint(chip, pval->intval);
-		break;
-	case POWER_SUPPLY_PROP_SET_ALLOW_READ_EXTERN_FG_IIC:
-		oneplus_set_allow_read_iic(chip, pval->intval);
-		break;
-	case POWER_SUPPLY_PROP_UPDATE_LCD_IS_OFF:
-		oneplus_set_lcd_off_status(chip, pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 		if ((pval->intval > 0) && (pval->intval <= BUCKET_COUNT)) {
@@ -3350,8 +3331,6 @@ static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_SOC_REPORTING_READY,
 	POWER_SUPPLY_PROP_DEBUG_BATTERY,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
-	POWER_SUPPLY_PROP_SET_ALLOW_READ_EXTERN_FG_IIC,
-	POWER_SUPPLY_PROP_BQ_SOC,
 };
 
 static const struct power_supply_desc fg_psy_desc = {
@@ -4520,24 +4499,6 @@ static void oem_update_cc_cv_setpoint(struct fg_chip *chip,int cv_float_point)
 {
 	/* TODO: write CC_CV_SETPOINT_REG */
 	return;
-}
-
-static void oneplus_set_allow_read_iic(struct fg_chip *chip,bool status)
-{
-	if (chip->use_external_fg && external_fg
-			&& external_fg->set_allow_reading)
-		external_fg->set_allow_reading(status);
-	else
-		pr_info("set allow read extern fg iic fail\n");
-}
-
-static void oneplus_set_lcd_off_status(struct fg_chip *chip,bool status)
-{
-	if (chip->use_external_fg && external_fg
-			&& external_fg->set_lcd_off_status)
-		external_fg->set_lcd_off_status(status);
-	else
-		pr_info("set lcd off status fail\n");
 }
 
 static int fg_gen3_probe(struct platform_device *pdev)

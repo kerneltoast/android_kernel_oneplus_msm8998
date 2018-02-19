@@ -29,35 +29,21 @@ struct op_adapter_operations {
 struct external_battery_gauge {
 	int (*get_battery_mvolts) (void);
 	int (*get_battery_temperature) (void);
-	bool (*is_battery_present) (void);
-	bool (*is_battery_temp_within_range) (void);
-	bool (*is_battery_id_valid) (void);
 	bool (*is_usb_switch_on) (void);
-	int (*get_battery_status)(void);
 	int (*get_batt_remaining_capacity) (void);
-	int (*get_batt_health)(void);
-	int (*get_batt_bq_soc)(void);
-	int (*monitor_for_recharging) (void);
 	int (*get_battery_soc) (void);
 	int (*get_average_current) (void);
-	int (*get_batt_cc) (void);/* yangfangbiao@oneplus.cn, 2015/02/13  Add fcc interface */
-	int (*get_batt_fcc) (void);  /* yangfangbiao@oneplus.cn, 2015/01/06  Modify for  sync with KK charge standard  */
 	bool (*fast_chg_started) (void);
 	bool (*fast_switch_to_normal) (void);
 	int (*set_switch_to_noraml_false) (void);
 	int (*set_fast_chg_allow) (bool enable);
 	bool (*get_fast_chg_allow) (void);
 	int (*fast_normal_to_warm)	(void);
-	int (*set_normal_to_warm_false)	(void);
 	int (*get_adapter_update)(void);
 	bool (*get_fast_chg_ing)	(void);
 	bool (*get_fast_low_temp_full)	(void);
-	int (*set_low_temp_full_false)	(void);
-	int (*set_allow_reading)(int enable);
-	int (*set_lcd_off_status) (int status);
 	int (*fast_chg_started_status) (bool status);
 	bool (*get_fastchg_firmware_already_updated) (void);
-	int (*get_device_type) (void); /* david.liu@bsp, 20161025 Add BQ27411 dash charging */
 };
 
 struct notify_dash_event {

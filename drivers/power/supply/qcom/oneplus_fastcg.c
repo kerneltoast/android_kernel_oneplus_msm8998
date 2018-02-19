@@ -545,14 +545,6 @@ static void update_charger_present_status(struct work_struct *work)
 	oneplus_notify_pmic_check_charger_present();
 }
 
-static int op_get_device_type(void)
-{
-	if (bq27541_data && bq27541_data->get_device_type)
-		return bq27541_data->get_device_type();
-	else
-		return 0;
-}
-
 static int onplus_get_battery_mvolts(void)
 {
 	if (bq27541_data && bq27541_data->get_battery_mvolts)
@@ -660,7 +652,6 @@ void di_watchdog(unsigned long data)
 	struct fastchg_device_info *di = (struct fastchg_device_info *)data;
 
 	pr_err("di_watchdog can't receive mcu data\n");
-	bq27541_data->set_allow_reading(true);
 	di->fast_chg_started = false;
 	di->fast_switch_to_normal = false;
 	di->fast_low_temp_full = false;
@@ -682,7 +673,6 @@ void di_watchdog(unsigned long data)
 static void dash_write(struct fastchg_device_info *di, int data)
 {
 	int i;
-	int device_type = op_get_device_type();
 
 	msleep(2);
 	gpio_direction_output(di->ap_data, 0);
@@ -694,7 +684,7 @@ static void dash_write(struct fastchg_device_info *di, int data)
 		} else if (i == 1) {
 			gpio_set_value(di->ap_data, data & 0x1);
 		} else {
-			gpio_set_value(di->ap_data, device_type);
+			gpio_set_value(di->ap_data, 1);
 		}
 		gpio_set_value(di->ap_clk, 0);
 		usleep_range(1000, 1000);
@@ -875,7 +865,6 @@ static long  dash_dev_ioctl(struct file *filp, unsigned int cmd,
 			oneplus_notify_dash_charger_present(true);
 			if (arg == DASH_NOTIFY_FAST_PRESENT + 1) {
 				wake_lock(&di->fastchg_wake_lock);
-				bq27541_data->set_allow_reading(false);
 				di->fast_chg_allow = false;
 				di->fast_normal_to_warm = false;
 				mod_timer(&di->watchdog,
@@ -891,7 +880,6 @@ static long  dash_dev_ioctl(struct file *filp, unsigned int cmd,
 			break;
 		case DASH_NOTIFY_FAST_ABSENT:
 			if (arg == DASH_NOTIFY_FAST_ABSENT + 1) {
-				bq27541_data->set_allow_reading(true);
 				di->fast_chg_started = false;
 				di->fast_chg_allow = false;
 				di->fast_switch_to_normal = false;
@@ -910,7 +898,6 @@ static long  dash_dev_ioctl(struct file *filp, unsigned int cmd,
 			break;
 		case DASH_NOTIFY_ALLOW_READING_IIC:
 			if (arg == DASH_NOTIFY_ALLOW_READING_IIC + 1) {
-				bq27541_data->set_allow_reading(true);
 				di->fast_chg_started = true;
 				di->fast_chg_ing = true;
 				volt = onplus_get_battery_mvolts();
@@ -924,7 +911,6 @@ static long  dash_dev_ioctl(struct file *filp, unsigned int cmd,
 					di->batt_psy = power_supply_get_by_name("battery");
 				if (di->batt_psy)
 					power_supply_changed(di->batt_psy);
-				bq27541_data->set_allow_reading(false);
 				mod_timer(&di->watchdog,
 						jiffies + msecs_to_jiffies(15000));
 				dash_write(di, ALLOW_DATA);
@@ -943,7 +929,6 @@ static long  dash_dev_ioctl(struct file *filp, unsigned int cmd,
 				del_timer(&di->watchdog);
 			} else if (arg == DASH_NOTIFY_NORMAL_TEMP_FULL + 2) {
 				di->fast_switch_to_normal = true;
-				bq27541_data->set_allow_reading(true);
 				di->fast_chg_started = false;
 				di->fast_chg_allow = false;
 				di->fast_chg_ing = false;
@@ -959,7 +944,6 @@ static long  dash_dev_ioctl(struct file *filp, unsigned int cmd,
 				del_timer(&di->watchdog);
 			} else if (arg == DASH_NOTIFY_TEMP_OVER + 2) {
 				di->fast_normal_to_warm = true;
-				bq27541_data->set_allow_reading(true);
 				di->fast_chg_started = false;
 				di->fast_chg_allow = false;
 				di->fast_chg_ing = false;
@@ -976,7 +960,6 @@ static long  dash_dev_ioctl(struct file *filp, unsigned int cmd,
 				di->adapter_update_report
 					= di->adapter_update_real;
 			} else if (arg == DASH_NOTIFY_ADAPTER_FW_UPDATE + 2) {
-				bq27541_data->set_allow_reading(true);
 				di->fast_chg_started = false;
 				oneplus_notify_dash_charger_present(true);
 				dash_write(di, ALLOW_DATA);
@@ -990,7 +973,6 @@ static long  dash_dev_ioctl(struct file *filp, unsigned int cmd,
 				switch_mode_to_normal();
 				msleep(500); /* avoid i2c conflict */
 				/* data err */
-				bq27541_data->set_allow_reading(true);
 				di->fast_chg_started = false;
 				wake_unlock(&di->fastchg_wake_lock);
 				di->fast_chg_allow = false;
@@ -1002,7 +984,6 @@ static long  dash_dev_ioctl(struct file *filp, unsigned int cmd,
 			break;
 		case DASH_NOTIFY_INVALID_DATA_CMD:
 			if (di->fast_chg_started) {
-				bq27541_data->set_allow_reading(true);
 				di->fast_chg_started = false;
 				di->fast_chg_allow = false;
 				di->fast_switch_to_normal = false;
