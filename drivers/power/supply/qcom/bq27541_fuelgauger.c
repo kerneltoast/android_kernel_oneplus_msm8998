@@ -230,12 +230,6 @@ static int bq27541_get_battery_soc(void)
 		return di->old_data.soc;
 	}
 
-	if (soc) {
-		/* Prevent SOC from quickly dropping to 99% */
-		if (soc > 90 && soc < 100)
-			soc++;
-	}
-
 	/* Double check before reporting 0% SOC */
 	if (di->old_data.soc && !soc) {
 		ret = di->old_data.soc;
@@ -243,6 +237,7 @@ static int bq27541_get_battery_soc(void)
 		return ret;
 	}
 
+	/* Initialize old data */
 	if (!di->old_data.soc)
 		di->old_data.soc = soc;
 
