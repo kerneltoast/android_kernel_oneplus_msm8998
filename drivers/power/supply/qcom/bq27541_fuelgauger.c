@@ -101,12 +101,12 @@
 
 /* Back up and use old data if raw measurement fails */
 struct bq27541_old_data {
-	int cap;
-	int curr;
-	int is_charging;
-	int mvolts;
-	int soc;
-	int temp;
+	atomic_t cap;
+	atomic_t curr;
+	atomic_t is_charging;
+	atomic_t mvolts;
+	atomic_t soc;
+	atomic_t temp;
 };
 
 struct bq27541_device_info {
@@ -178,11 +178,12 @@ static int bq27541_get_battery_temperature(void)
 	ret = bq27541_read(BQ27411_REG_TEMP, &temp, di);
 	if (ret) {
 		dev_dbg(di->dev, "error reading temperature, ret: %d\n", ret);
-		return di->old_data.temp;
+		return atomic_read(&di->old_data.temp);
 	}
 
-	di->old_data.temp = temp - ZERO_DEGREES_CELSIUS_IN_TENTH_KELVIN;
-	return di->old_data.temp;
+	temp -= ZERO_DEGREES_CELSIUS_IN_TENTH_KELVIN;
+	atomic_set(&di->old_data.temp, temp);
+	return temp;
 }
 
 static int bq27541_get_battery_mvolts(void)
@@ -193,11 +194,12 @@ static int bq27541_get_battery_mvolts(void)
 	ret = bq27541_read(BQ27411_REG_VOLT, &volt, di);
 	if (ret) {
 		dev_dbg(di->dev, "error reading voltage, ret: %d\n", ret);
-		return di->old_data.mvolts;
+		return atomic_read(&di->old_data.mvolts);
 	}
 
-	di->old_data.mvolts = volt * 1000;
-	return di->old_data.mvolts;
+	volt *= 1000;
+	atomic_set(&di->old_data.mvolts, volt);
+	return volt;
 }
 
 static int bq27541_get_average_current(void)
@@ -208,69 +210,74 @@ static int bq27541_get_average_current(void)
 	ret = bq27541_read(BQ27411_REG_AI, &curr, di);
 	if (ret) {
 		dev_dbg(di->dev, "error reading current, ret: %d\n", ret);
-		return di->old_data.curr;
+		return atomic_read(&di->old_data.curr);
 	}
 
 	/* Negative current */
 	if (curr & 0x8000)
 		curr = -((~(curr - 1)) & 0xFFFF);
+	curr *= -1;
 
-	di->old_data.curr = -curr;
-	return di->old_data.curr;
+	atomic_set(&di->old_data.curr, curr);
+	return curr;
 }
 
 static int bq27541_get_battery_soc(void)
 {
 	struct bq27541_device_info *di = bq27541_di;
-	int ret, soc;
+	int ret, old_soc, soc;
+
+	old_soc = atomic_read(&di->old_data.soc);
 
 	ret = bq27541_read(BQ27411_REG_SOC, &soc, di);
 	if (ret) {
 		dev_dbg(di->dev, "error reading SOC, ret: %d\n", ret);
-		return di->old_data.soc;
+		return old_soc;
 	}
 
 	/* Double check before reporting 0% SOC */
-	if (di->old_data.soc && !soc) {
-		ret = di->old_data.soc;
-		di->old_data.soc = soc;
-		return ret;
+	if (old_soc && !soc) {
+		atomic_set(&di->old_data.soc, 0);
+		return old_soc;
 	}
 
 	/* Initialize old data */
-	if (!di->old_data.soc)
-		di->old_data.soc = soc;
+	if (!old_soc) {
+		atomic_set(&di->old_data.soc, soc);
+		old_soc = soc;
+	}
 
-	if (soc > di->old_data.soc) {
+	if (soc > old_soc) {
 		/*
 		 * Don't raise SOC while discharging, unless this is
 		 * a calibration cycle.
 		 */
 		int chg_status = get_charging_status();
 		if (chg_status == POWER_SUPPLY_STATUS_DISCHARGING) {
-			if (di->old_data.is_charging)
-				di->old_data.is_charging--;
+			if (atomic_read(&di->old_data.is_charging))
+				atomic_dec(&di->old_data.is_charging);
 			else
-				soc = di->old_data.soc;
+				soc = old_soc;
 		} else {
-			di->old_data.is_charging = BQ27541_CHG_CALIB_CNT;
+			atomic_set(&di->old_data.is_charging,
+				BQ27541_CHG_CALIB_CNT);
 		}
-	} else if (soc < di->old_data.soc) {
+	} else if (soc < old_soc) {
 		/*
 		 * Don't force SOC to scale down by 1% during first
 		 * BQ27541_CHG_CALIB_CNT discharge heartbeats after
 		 * charging. This will allow SOC to quickly drop to
 		 * its true value if needed.
 		 */
-		if (di->old_data.is_charging)
-			di->old_data.is_charging--;
+		if (atomic_read(&di->old_data.is_charging))
+			atomic_dec(&di->old_data.is_charging);
 		else
 			/* Scale down 1% at a time */
-			soc = di->old_data.soc - 1;
+			soc = old_soc - 1;
 	}
 
-	di->old_data.soc = soc;
-	return di->old_data.soc;
+	atomic_set(&di->old_data.soc, soc);
+	return soc;
 }
 
 static int bq27541_get_batt_remaining_capacity(void)
@@ -281,11 +288,11 @@ static int bq27541_get_batt_remaining_capacity(void)
 	ret = bq27541_read(BQ27411_REG_RM, &cap, di);
 	if (ret) {
 		dev_dbg(di->dev, "error reading cap, ret: %d\n", ret);
-		return di->old_data.cap;
+		return atomic_read(&di->old_data.cap);
 	}
 
-	di->old_data.cap = cap;
-	return di->old_data.cap;
+	atomic_set(&di->old_data.cap, cap);
+	return cap;
 }
 
 static void bq27541_set_allow_reading(bool enable)
@@ -413,7 +420,7 @@ static int bq27541_battery_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, di);
 	di->dev = &client->dev;
 	di->client = client;
-	di->old_data.is_charging = BQ27541_CHG_CALIB_CNT;
+	atomic_set(&di->old_data.is_charging, BQ27541_CHG_CALIB_CNT);
 
 	mutex_init(&di->i2c_read_lock);
 
