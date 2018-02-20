@@ -2360,6 +2360,11 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 					"qcom,store-hard-reset-reason");
 
 	qpnp_pon_debugfs_init(pdev);
+
+#ifdef CONFIG_MACH_MSM8998_DUMPLING
+	/* Clear SOC backup flag; 0x88D == SOC_DATA_REG_0 */
+	regmap_update_bits(pon->regmap, 0x88D, BIT(7), 0);
+#endif
 	return 0;
 }
 
@@ -2383,6 +2388,16 @@ static int qpnp_pon_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_MACH_MSM8998_DUMPLING
+static void qpnp_pon_shutdown(struct platform_device *pdev)
+{
+	struct qpnp_pon *pon = dev_get_drvdata(&pdev->dev);
+
+	/* Write SOC backup flag; 0x88D == SOC_DATA_REG_0 */
+	regmap_update_bits(pon->regmap, 0x88D, BIT(7), BIT(7));
+}
+#endif
+
 static const struct of_device_id spmi_match_table[] = {
 	{ .compatible = "qcom,qpnp-power-on", },
 	{}
@@ -2395,6 +2410,9 @@ static struct platform_driver qpnp_pon_driver = {
 	},
 	.probe		= qpnp_pon_probe,
 	.remove		= qpnp_pon_remove,
+#ifdef CONFIG_MACH_MSM8998_DUMPLING
+	.shutdown	= qpnp_pon_shutdown,
+#endif
 };
 
 static int __init qpnp_pon_init(void)

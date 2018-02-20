@@ -436,6 +436,13 @@ static int bq27541_battery_probe(struct i2c_client *client,
 	return 0;
 }
 
+static void bq27541_shutdown(struct i2c_client *client)
+{
+	struct bq27541_device_info *di = i2c_get_clientdata(client);
+
+	smblib_backup_soc(atomic_read(&di->old_data.soc));
+}
+
 static const struct of_device_id bq27541_match[] = {
 	{ .compatible = "ti,bq27541-battery" },
 	{ },
@@ -453,6 +460,7 @@ static struct i2c_driver bq27541_battery_driver = {
 			.of_match_table = bq27541_match,
 	},
 	.probe		= bq27541_battery_probe,
+	.shutdown	= bq27541_shutdown,
 	.id_table	= bq27541_id,
 };
 

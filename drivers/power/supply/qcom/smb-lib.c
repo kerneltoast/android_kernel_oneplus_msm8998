@@ -6323,6 +6323,14 @@ out:
 				(HEARTBEAT_INTERVAL_MS)));
 }
 
+void smblib_backup_soc(int soc)
+{
+	struct smb_charger *chg = g_chg;
+
+	if (chg)
+		smblib_masked_write(chg, SOC_DATA_REG_0, 0xFE, soc << 1);
+}
+
 enum chg_protect_status_type {
     PROTECT_CHG_OVP = 1,                  /* 1: VCHG > 5.8V     */
     PROTECT_BATT_MISSING,                 /* 2: battery missing */
