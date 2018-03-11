@@ -276,9 +276,6 @@ struct smb_charger {
 
 	/* notifiers */
 	struct notifier_block	nb;
-#if defined(CONFIG_FB)
-	struct notifier_block		fb_notif;
-#endif /* CONFIG_FB */
 
 	/* parallel charging */
 	struct parallel_params	pl;
