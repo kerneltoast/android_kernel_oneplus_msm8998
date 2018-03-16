@@ -398,4 +398,5 @@ alternative_endif
 	.macro	get_thread_info, rd
 	mrs	\rd, sp_el0
 	.endm
+
 #endif	/* __ASM_ASSEMBLER_H */

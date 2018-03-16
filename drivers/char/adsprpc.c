@@ -1130,7 +1130,6 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx)
 		int i = ctx->overps[oix]->raix;
 		uintptr_t mstart, mend;
 		size_t len = lpra[i].buf.len;
-
 		if (!len)
 			continue;
 		if (ctx->maps[i])
