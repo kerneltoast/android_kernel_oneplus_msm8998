@@ -166,6 +166,8 @@
 #define MAX_GENIE_LEN (512)
 #define MIN_GENIE_LEN (2)
 
+#define HDD_MAX_STA_COUNT (WLAN_MAX_STA_COUNT + QDF_MAX_NO_OF_SAP_MODE + 2)
+
 #define WLAN_CHIP_VERSION   "WCNSS"
 
 #define hdd_log(level, args...) QDF_TRACE(QDF_MODULE_ID_HDD, level, ## args)
@@ -279,6 +281,8 @@
 #define WLAN_NUD_STATS_LEN 800
 /* ARP packet type for NUD debug stats */
 #define WLAN_NUD_STATS_ARP_PKT_TYPE 1
+/* Assigned size of driver memory dump is 4096 bytes */
+#define DRIVER_MEM_DUMP_SIZE    4096
 
 /*
  * @eHDD_SCAN_REJECT_DEFAULT: default value
@@ -1509,7 +1513,7 @@ struct hdd_context_s {
 	/* One per STA: 1 for BCMC_STA_ID, 1 for each SAP_SELF_STA_ID,
 	 * 1 for WDS_STAID
 	 */
-	hdd_adapter_t *sta_to_adapter[WLAN_MAX_STA_COUNT + QDF_MAX_NO_OF_SAP_MODE + 2];
+	hdd_adapter_t *sta_to_adapter[HDD_MAX_STA_COUNT];
 
 	/** Pointer for firmware image data */
 	const struct firmware *fw;
@@ -1711,14 +1715,8 @@ struct hdd_context_s {
 #endif
 	bool mcc_mode;
 	struct hdd_chain_rssi_context chain_rssi_context;
-#ifdef WLAN_FEATURE_MEMDUMP
-	uint8_t *fw_dump_loc;
-	uint32_t dump_loc_paddr;
-	qdf_mc_timer_t memdump_cleanup_timer;
+
 	struct mutex memdump_lock;
-	bool memdump_in_progress;
-	bool memdump_init_done;
-#endif /* WLAN_FEATURE_MEMDUMP */
 	uint16_t driver_dump_size;
 	uint8_t *driver_dump_mem;
 
@@ -1771,7 +1769,6 @@ struct hdd_context_s {
 	qdf_mc_timer_t tdls_source_timer;
 	qdf_atomic_t disable_lro_in_concurrency;
 	qdf_atomic_t disable_lro_in_low_tput;
-	bool fw_mem_dump_enabled;
 	uint8_t last_scan_reject_session_id;
 	scan_reject_states last_scan_reject_reason;
 	unsigned long last_scan_reject_timestamp;
@@ -1791,6 +1788,10 @@ struct hdd_context_s {
 	int sscan_pid;
 #endif
 	struct sta_ap_intf_check_work_ctx *sta_ap_intf_check_work_info;
+#ifdef WLAN_POWER_DEBUGFS
+	/* mutex lock to block concurrent access */
+	struct mutex power_stats_lock;
+#endif
 };
 
 int hdd_validate_channel_and_bandwidth(hdd_adapter_t *adapter,
@@ -2065,26 +2066,6 @@ static inline bool hdd_scan_random_mac_addr_supported(void)
 void hdd_get_fw_version(hdd_context_t *hdd_ctx,
 			uint32_t *major_spid, uint32_t *minor_spid,
 			uint32_t *siid, uint32_t *crmid);
-
-#ifdef WLAN_FEATURE_MEMDUMP
-/**
- * hdd_is_memdump_supported() - to check if memdump feature support
- *
- * This function is used to check if memdump feature is supported in
- * the host driver
- *
- * Return: true if supported and false otherwise
- */
-static inline bool hdd_is_memdump_supported(void)
-{
-	return true;
-}
-#else
-static inline bool hdd_is_memdump_supported(void)
-{
-	return false;
-}
-#endif /* WLAN_FEATURE_MEMDUMP */
 
 void hdd_update_macaddr(struct hdd_config *config,
 			struct qdf_mac_addr hw_macaddr);
@@ -2464,5 +2445,8 @@ static inline void hdd_clear_fils_connection_info(hdd_adapter_t *adapter)
  */
 int hdd_get_rssi_snr_by_bssid(hdd_adapter_t *adapter, const uint8_t *bssid,
 			      int8_t *rssi, int8_t *snr);
+
+int hdd_driver_memdump_init(void);
+void hdd_driver_memdump_deinit(void);
 
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */

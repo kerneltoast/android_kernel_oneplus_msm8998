@@ -539,7 +539,7 @@ QDF_STATUS wma_start_scan(tp_wma_handle wma_handle,
 			goto error;
 		}
 	}
-	if (scan_req->sessionId > wma_handle->max_bssid) {
+	if (scan_req->sessionId >= wma_handle->max_bssid) {
 		WMA_LOGE("%s: Invalid vdev_id %d, msg_type : 0x%x", __func__,
 			 scan_req->sessionId, msg_type);
 		goto error1;
@@ -2368,6 +2368,7 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 	int status = -EINVAL;
 	tSirRoamOffloadScanReq *roam_req;
 	qdf_time_t roam_synch_received = qdf_get_system_timestamp();
+	uint32_t roam_synch_data_len;
 
 	WMA_LOGD("LFR3:%s", __func__);
 	if (!event) {
@@ -2384,6 +2385,24 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 	synch_event = param_buf->fixed_param;
 	if (!synch_event) {
 		WMA_LOGE("%s: received null event data from target", __func__);
+		goto cleanup_label;
+	}
+
+	if (synch_event->bcn_probe_rsp_len >
+	    param_buf->num_bcn_probe_rsp_frame ||
+	    synch_event->reassoc_req_len >
+	    param_buf->num_reassoc_req_frame ||
+	    synch_event->reassoc_rsp_len >
+	    param_buf->num_reassoc_rsp_frame) {
+		WMA_LOGD("Invalid synch payload: LEN bcn:%d, req:%d, rsp:%d",
+			synch_event->bcn_probe_rsp_len,
+			synch_event->reassoc_req_len,
+			synch_event->reassoc_rsp_len);
+		goto cleanup_label;
+	}
+	if (synch_event->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: received invalid vdev_id %d",
+			 __func__, synch_event->vdev_id);
 		goto cleanup_label;
 	}
 
@@ -2407,25 +2426,37 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 	 * Maximum number during the addition would be (3 * MAX_LIMIT(UINT32) +
 	 * few fixed fields).
 	 */
-	if (sizeof(*synch_event) + synch_event->bcn_probe_rsp_len +
-			synch_event->reassoc_rsp_len +
-			synch_event->reassoc_req_len +
-			sizeof(wmi_channel) + sizeof(wmi_key_material) +
-			sizeof(uint32_t) > WMI_SVC_MSG_MAX_SIZE) {
-		WMA_LOGE("excess synch payload: LEN bcn:%d, req:%d, rsp:%d",
-				synch_event->bcn_probe_rsp_len,
-				synch_event->reassoc_req_len,
-				synch_event->reassoc_rsp_len);
+	WMA_LOGD("synch payload: LEN bcn:%d, req:%d, rsp:%d",
+			synch_event->bcn_probe_rsp_len,
+			synch_event->reassoc_req_len,
+			synch_event->reassoc_rsp_len);
+	if (synch_event->bcn_probe_rsp_len > WMI_SVC_MSG_MAX_SIZE)
 		goto cleanup_label;
-	}
+	if (synch_event->reassoc_rsp_len >
+		(WMI_SVC_MSG_MAX_SIZE - synch_event->bcn_probe_rsp_len))
+		goto cleanup_label;
+	if (synch_event->reassoc_req_len >
+		WMI_SVC_MSG_MAX_SIZE - (synch_event->bcn_probe_rsp_len +
+			synch_event->reassoc_rsp_len))
+		goto cleanup_label;
+	roam_synch_data_len = synch_event->bcn_probe_rsp_len +
+		synch_event->reassoc_rsp_len + synch_event->reassoc_req_len;
+	/*
+	 * Below is the check for the entire size of the message received from'
+	 * the firmware.
+	 */
+	if (roam_synch_data_len > WMI_SVC_MSG_MAX_SIZE -
+		(sizeof(*synch_event) + sizeof(wmi_channel) +
+		 sizeof(wmi_key_material) + sizeof(uint32_t)))
+		goto cleanup_label;
+	roam_synch_data_len += sizeof(roam_offload_synch_ind);
+
 	qdf_wake_lock_timeout_acquire(&wma->wow_wake_lock,
 				      WMA_ROAM_HO_WAKE_LOCK_DURATION);
 
 	wma->interfaces[synch_event->vdev_id].roam_synch_in_progress = true;
-	len = sizeof(roam_offload_synch_ind) +
-	      synch_event->bcn_probe_rsp_len + synch_event->reassoc_rsp_len +
-	      synch_event->reassoc_req_len;
-	roam_synch_ind_ptr = (roam_offload_synch_ind *)qdf_mem_malloc(len);
+	roam_synch_ind_ptr =
+		(roam_offload_synch_ind *)qdf_mem_malloc(roam_synch_data_len);
 	if (!roam_synch_ind_ptr) {
 		WMA_LOGE("%s: failed to allocate memory for roam_synch_event",
 			 __func__);
@@ -2433,7 +2464,7 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 		status = -ENOMEM;
 		goto cleanup_label;
 	}
-	qdf_mem_zero(roam_synch_ind_ptr, len);
+	qdf_mem_zero(roam_synch_ind_ptr, roam_synch_data_len);
 	status = wma_fill_roam_synch_buffer(wma,
 			roam_synch_ind_ptr, param_buf);
 	if (status != 0)
@@ -3690,6 +3721,10 @@ int wma_nlo_scan_cmp_evt_handler(void *handle, uint8_t *event,
 	WMA_LOGD("PNO scan completion event received for vdev %d",
 		 nlo_event->vdev_id);
 
+	if (nlo_event->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("Invalid vdev id from firmware");
+		return -EINVAL;
+	}
 	node = &wma->interfaces[nlo_event->vdev_id];
 
 	/* Handle scan completion event only after NLO match event. */
@@ -3936,6 +3971,14 @@ int wma_extscan_operations_event_handler(void *handle,
 	case WMI_EXTSCAN_CYCLE_STARTED_EVENT:
 		WMA_LOGD("%s: received WMI_EXTSCAN_CYCLE_STARTED_EVENT",
 			 __func__);
+
+		if (oprn_event->num_buckets > param_buf->num_bucket_id) {
+			WMA_LOGE("FW mesg num_buk %d more than TLV hdr %d",
+				 oprn_event->num_buckets,
+				 param_buf->num_bucket_id);
+			return -EINVAL;
+		}
+
 		cds_host_diag_log_work(&wma->extscan_wake_lock,
 				       WMA_EXTSCAN_CYCLE_WAKE_LOCK_DURATION,
 				       WIFI_POWER_EVENT_WAKELOCK_EXT_SCAN);
@@ -4170,6 +4213,7 @@ int wma_extscan_hotlist_match_event_handler(void *handle,
 	wmi_extscan_wlan_descriptor *src_hotlist;
 	uint32_t numap;
 	int j, ap_found = 0;
+	uint32_t buf_len;
 	tpAniSirGlobal pMac = cds_get_context(QDF_MODULE_ID_PE);
 
 	if (!pMac) {
@@ -4194,11 +4238,25 @@ int wma_extscan_hotlist_match_event_handler(void *handle,
 		WMA_LOGE("%s: Hotlist AP's list invalid", __func__);
 		return -EINVAL;
 	}
+	if (numap > param_buf->num_hotlist_match) {
+		WMA_LOGE("Invalid no of total enteries %d", numap);
+		return -EINVAL;
+	}
 	if (numap > WMA_EXTSCAN_MAX_HOTLIST_ENTRIES) {
 		WMA_LOGE("%s: Total Entries %u greater than max",
 			__func__, numap);
 		numap = WMA_EXTSCAN_MAX_HOTLIST_ENTRIES;
 	}
+
+	buf_len = sizeof(wmi_extscan_hotlist_match_event_fixed_param) +
+		  WMI_TLV_HDR_SIZE +
+		  (numap * sizeof(wmi_extscan_wlan_descriptor));
+
+	if (buf_len > len) {
+		WMA_LOGE("Invalid buf len from FW %d numap %d", len, numap);
+		return -EINVAL;
+	}
+
 	dest_hotlist = qdf_mem_malloc(sizeof(*dest_hotlist) +
 				      sizeof(*dest_ap) * numap);
 	if (!dest_hotlist) {
@@ -4235,6 +4293,11 @@ int wma_extscan_hotlist_match_event_handler(void *handle,
 		dest_ap->ieLength = src_hotlist->ie_length;
 		WMI_MAC_ADDR_TO_CHAR_ARRAY(&src_hotlist->bssid,
 					   dest_ap->bssid.bytes);
+		if (src_hotlist->ssid.ssid_len > SIR_MAC_MAX_SSID_LENGTH) {
+			WMA_LOGE("%s Invalid SSID len %d, truncating",
+				 __func__, src_hotlist->ssid.ssid_len);
+			src_hotlist->ssid.ssid_len = SIR_MAC_MAX_SSID_LENGTH;
+		}
 		qdf_mem_copy(dest_ap->ssid, src_hotlist->ssid.ssid,
 			     src_hotlist->ssid.ssid_len);
 		dest_ap->ssid[src_hotlist->ssid.ssid_len] = '\0';
@@ -4409,6 +4472,13 @@ static int wma_group_num_bss_to_scan_id(const u_int8_t *cmd_param_info,
 			WMI_MAC_ADDR_TO_CHAR_ARRAY(&src_hotlist->bssid,
 						   ap->bssid.bytes);
 
+			if (src_hotlist->ssid.ssid_len >
+			    SIR_MAC_MAX_SSID_LENGTH) {
+				WMA_LOGD("%s Invalid SSID len %d, truncating",
+					 __func__, src_hotlist->ssid.ssid_len);
+				src_hotlist->ssid.ssid_len =
+						SIR_MAC_MAX_SSID_LENGTH;
+			}
 			qdf_mem_copy(ap->ssid, src_hotlist->ssid.ssid,
 					src_hotlist->ssid.ssid_len);
 			ap->ssid[src_hotlist->ssid.ssid_len] = '\0';
@@ -4443,7 +4513,7 @@ int wma_extscan_cached_results_event_handler(void *handle,
 	struct extscan_cached_scan_results empty_cachelist;
 	wmi_extscan_wlan_descriptor *src_hotlist;
 	wmi_extscan_rssi_info *src_rssi;
-	int numap, i, moredata, scan_ids_cnt, buf_len;
+	int i, moredata, scan_ids_cnt, buf_len;
 	tpAniSirGlobal pMac = cds_get_context(QDF_MODULE_ID_PE);
 	uint32_t total_len;
 	bool excess_data = false;
@@ -4465,14 +4535,53 @@ int wma_extscan_cached_results_event_handler(void *handle,
 	event = param_buf->fixed_param;
 	src_hotlist = param_buf->bssid_list;
 	src_rssi = param_buf->rssi_list;
-	numap = event->num_entries_in_page;
 	WMA_LOGI("Total_entries: %u first_entry_index: %u num_entries_in_page: %d",
 			event->total_entries,
-			event->first_entry_index, numap);
-	if (!src_hotlist || !src_rssi || !numap) {
+			event->first_entry_index,
+			event->num_entries_in_page);
+
+	if (!src_hotlist || !src_rssi || !event->num_entries_in_page) {
 		WMA_LOGW("%s: Cached results empty, send 0 results", __func__);
 		goto noresults;
 	}
+
+	if (event->num_entries_in_page >
+	    (WMI_SVC_MSG_MAX_SIZE - sizeof(*event))/sizeof(*src_hotlist) ||
+	    event->num_entries_in_page > param_buf->num_bssid_list) {
+		WMA_LOGE("%s:excess num_entries_in_page %d in WMI event. num_bssid_list %d",
+			 __func__,
+			 event->num_entries_in_page, param_buf->num_bssid_list);
+		return -EINVAL;
+	} else {
+		total_len = sizeof(*event) +
+			(event->num_entries_in_page * sizeof(*src_hotlist));
+	}
+	for (i = 0; i < event->num_entries_in_page; i++) {
+		if (src_hotlist[i].ie_length >
+		    WMI_SVC_MSG_MAX_SIZE - total_len) {
+			excess_data = true;
+			break;
+		} else {
+			total_len += src_hotlist[i].ie_length;
+			WMA_LOGD("total len IE: %d", total_len);
+		}
+
+		if (src_hotlist[i].number_rssi_samples >
+		    (WMI_SVC_MSG_MAX_SIZE - total_len) / sizeof(*src_rssi)) {
+			excess_data = true;
+			break;
+		} else {
+			total_len += (src_hotlist[i].number_rssi_samples *
+					sizeof(*src_rssi));
+			WMA_LOGD("total len RSSI samples: %d", total_len);
+		}
+	}
+	if (excess_data) {
+		WMA_LOGE("%s:excess data in WMI event",
+			 __func__);
+		return -EINVAL;
+	}
+
 	if (event->first_entry_index +
 	    event->num_entries_in_page < event->total_entries)
 		moredata = 1;
@@ -4489,47 +4598,9 @@ int wma_extscan_cached_results_event_handler(void *handle,
 	dest_cachelist->more_data = moredata;
 
 	scan_ids_cnt = wma_extscan_find_unique_scan_ids(cmd_param_info);
-	WMA_LOGI("%s: scan_ids_cnt %d", __func__, scan_ids_cnt);
+	WMA_LOGD("%s: scan_ids_cnt %d", __func__, scan_ids_cnt);
 	dest_cachelist->num_scan_ids = scan_ids_cnt;
 
-	if (event->num_entries_in_page >
-		(WMI_SVC_MSG_MAX_SIZE - sizeof(*event))/sizeof(*src_hotlist)) {
-		WMA_LOGE("%s:excess num_entries_in_page %d in WMI event",
-				__func__, event->num_entries_in_page);
-		qdf_mem_free(dest_cachelist);
-		QDF_ASSERT(0);
-		return -EINVAL;
-	} else {
-		total_len = sizeof(*event) +
-			(event->num_entries_in_page * sizeof(*src_hotlist));
-	}
-	for (i = 0; i < event->num_entries_in_page; i++) {
-		if (src_hotlist[i].ie_length > WMI_SVC_MSG_MAX_SIZE -
-			total_len) {
-			excess_data = true;
-			break;
-		} else {
-			total_len += src_hotlist[i].ie_length;
-			WMA_LOGD("total len IE: %d", total_len);
-		}
-
-		if (src_hotlist[i].number_rssi_samples >
-			(WMI_SVC_MSG_MAX_SIZE - total_len)/sizeof(*src_rssi)) {
-			excess_data = true;
-			break;
-		} else {
-			total_len += (src_hotlist[i].number_rssi_samples *
-					sizeof(*src_rssi));
-			WMA_LOGD("total len RSSI samples: %d", total_len);
-		}
-	}
-	if (excess_data) {
-		WMA_LOGE("%s:excess data in WMI event",
-				__func__);
-		qdf_mem_free(dest_cachelist);
-		QDF_ASSERT(0);
-		return -EINVAL;
-	}
 	buf_len = sizeof(*dest_result) * scan_ids_cnt;
 	dest_cachelist->result = qdf_mem_malloc(buf_len);
 	if (!dest_cachelist->result) {
@@ -4619,6 +4690,10 @@ int wma_extscan_change_results_event_handler(void *handle,
 		WMA_LOGE("%s: Results invalid", __func__);
 		return -EINVAL;
 	}
+	if (numap > param_buf->num_bssid_signal_descriptor_list) {
+		WMA_LOGE("%s: Invalid num of entries in page: %d", __func__, numap);
+		return -EINVAL;
+	}
 	for (i = 0; i < numap; i++)
 		rssi_num += src_chglist->num_rssi_samples;
 
@@ -4667,6 +4742,13 @@ int wma_extscan_change_results_event_handler(void *handle,
 					   dest_ap->bssid.bytes);
 		dest_ap->numOfRssi = src_chglist->num_rssi_samples;
 		if (dest_ap->numOfRssi) {
+			if ((dest_ap->numOfRssi + count) >
+			    param_buf->num_rssi_list) {
+				WMA_LOGE("%s: Invalid num in rssi list: %d",
+					__func__, dest_ap->numOfRssi);
+				qdf_mem_free(dest_chglist);
+				return -EINVAL;
+			}
 			for (k = 0; k < dest_ap->numOfRssi; k++) {
 				dest_ap->rssi[k] = WMA_TGT_NOISE_FLOOR_DBM +
 						   src_rssi[count++];
@@ -4732,11 +4814,18 @@ int wma_passpoint_match_event_handler(void *handle,
 	 * against a constant should not be an issue.
 	 */
 	if ((sizeof(*event) + event->ie_length + event->anqp_length) >
-			WMI_SVC_MSG_MAX_SIZE) {
-		WMA_LOGE("IE Length: %d or ANQP Length: %d is huge",
-				 event->ie_length, event->anqp_length);
-		QDF_ASSERT(0);
+	     WMI_SVC_MSG_MAX_SIZE ||
+	     (event->ie_length + event->anqp_length) > param_buf->num_bufp) {
+		WMA_LOGE("IE Length: %u or ANQP Length: %u is huge, num_bufp: %u",
+			event->ie_length, event->anqp_length,
+			param_buf->num_bufp);
 		return -EINVAL;
+	}
+
+	if (event->ssid.ssid_len > SIR_MAC_MAX_SSID_LENGTH) {
+		WMA_LOGD("%s: Invalid ssid len %d, truncating",
+			 __func__, event->ssid.ssid_len);
+		event->ssid.ssid_len = SIR_MAC_MAX_SSID_LENGTH;
 	}
 
 	dest_match = qdf_mem_malloc(sizeof(*dest_match) +
@@ -5833,6 +5922,12 @@ int wma_scan_event_callback(WMA_HANDLE handle, uint8_t *data,
 
 	param_buf = (WMI_SCAN_EVENTID_param_tlvs *) data;
 	wmi_event = param_buf->fixed_param;
+
+	if (wmi_event->vdev_id >= wma_handle->max_bssid) {
+		WMA_LOGE("Invalid vdev id from firmware");
+		return -EINVAL;
+	}
+
 	vdev_id = wmi_event->vdev_id;
 	scan_id = wma_handle->interfaces[vdev_id].scan_info.scan_id;
 
@@ -5982,6 +6077,10 @@ int wma_roam_event_callback(WMA_HANDLE handle, uint8_t *event_buf,
 			   (wmi_event->reason == WMI_ROAM_REASON_INVALID) ?
 				wmi_event->notif : wmi_event->rssi);
 
+	if (wmi_event->vdev_id >= wma_handle->max_bssid) {
+		WMA_LOGE("Invalid vdev id from firmware");
+		return -EINVAL;
+	}
 
 	DPTRACE(qdf_dp_trace_record_event(QDF_DP_TRACE_EVENT_RECORD,
 		wmi_event->vdev_id, QDF_PROTO_TYPE_EVENT, QDF_ROAM_EVENTID));

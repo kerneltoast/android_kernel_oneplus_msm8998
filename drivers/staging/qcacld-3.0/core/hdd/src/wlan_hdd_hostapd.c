@@ -311,7 +311,7 @@ static int __hdd_hostapd_stop(struct net_device *dev)
 		return ret;
 
 	if (!sap_ctx) {
-		hdd_err("invalid sap ctx: %p", sap_ctx);
+		hdd_err("invalid sap ctx: %pK", sap_ctx);
 		return -ENODEV;
 	}
 
@@ -547,7 +547,7 @@ static void hdd_hostapd_inactivity_timer_cb(void *context)
 		 */
 		pHostapdAdapter = netdev_priv(dev);
 		if (WLAN_HDD_ADAPTER_MAGIC != pHostapdAdapter->magic) {
-			hdd_err("invalid adapter: %p", pHostapdAdapter);
+			hdd_err("invalid adapter: %pK", pHostapdAdapter);
 			return;
 		}
 		pHddApCtx = WLAN_HDD_GET_AP_CTX_PTR(pHostapdAdapter);
@@ -1213,7 +1213,7 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 		else
 			pHddApCtx->dfs_cac_block_tx = true;
 
-		hdd_debug("The value of dfs_cac_block_tx[%d] for ApCtx[%p]:%d",
+		hdd_debug("The value of dfs_cac_block_tx[%d] for ApCtx[%pK]:%d",
 				pHddApCtx->dfs_cac_block_tx, pHddApCtx,
 				pHostapdAdapter->sessionId);
 
@@ -4478,16 +4478,16 @@ static int __iw_set_ap_encodeext(struct net_device *dev,
 		/*Convert from 1-based to 0-based keying */
 		key_index--;
 	}
-	if (!ext->key_len)
-		return ret;
+
+	if (!ext->key_len || ext->key_len > CSR_MAX_KEY_LEN)
+		return -EINVAL;
 
 	qdf_mem_zero(&setKey, sizeof(tCsrRoamSetKey));
 
 	setKey.keyId = key_index;
 	setKey.keyLength = ext->key_len;
 
-	if (ext->key_len <= CSR_MAX_KEY_LEN)
-		qdf_mem_copy(&setKey.Key[0], ext->key, ext->key_len);
+	qdf_mem_copy(&setKey.Key[0], ext->key, ext->key_len);
 
 	if (ext->ext_flags & IW_ENCODE_EXT_GROUP_KEY) {
 		/*Key direction for group is RX only */
@@ -6080,7 +6080,7 @@ hdd_adapter_t *hdd_wlan_create_ap_dev(hdd_context_t *pHddCtx,
 		pHostapdAdapter->magic = WLAN_HDD_ADAPTER_MAGIC;
 		pHostapdAdapter->sessionId = HDD_SESSION_ID_INVALID;
 
-		hdd_debug("pWlanHostapdDev = %p, pHostapdAdapter = %p, concurrency_mode=0x%x",
+		hdd_debug("pWlanHostapdDev = %pK, pHostapdAdapter = %pK, concurrency_mode=0x%x",
 		       pWlanHostapdDev,
 		       pHostapdAdapter,
 		       (int)cds_get_concurrency_mode());
@@ -7468,6 +7468,12 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 						     pBeacon->tail_len,
 						     WLAN_EID_COUNTRY);
 		if (pIe) {
+			if (pIe[1] < IEEE80211_COUNTRY_IE_MIN_LEN) {
+				hdd_err("Invalid Country IE len: %d", pIe[1]);
+				ret = -EINVAL;
+				goto error;
+			}
+
 			pConfig->ieee80211d = 1;
 			qdf_mem_copy(pConfig->countryCode, &pIe[2], 3);
 			sme_set_reg_info(hHal, pConfig->countryCode);
@@ -8298,7 +8304,7 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 	if (0 != status)
 		return status;
 
-	hdd_debug("pAdapter = %p, Device mode %s(%d) sub20 %d",
+	hdd_debug("pAdapter = %pK, Device mode %s(%d) sub20 %d",
 		pAdapter, hdd_device_mode_to_string(pAdapter->device_mode),
 		pAdapter->device_mode, cds_is_sub_20_mhz_enabled());
 
@@ -8666,7 +8672,7 @@ void hdd_sap_indicate_disconnect_for_sta(hdd_adapter_t *adapter)
 
 	for (sta_id = 0; sta_id < WLAN_MAX_STA_COUNT; sta_id++) {
 		if (adapter->aStaInfo[sta_id].isUsed) {
-			hdd_debug("sta_id: %d isUsed: %d %p",
+			hdd_debug("sta_id: %d isUsed: %d %pK",
 				 sta_id, adapter->aStaInfo[sta_id].isUsed,
 				 adapter);
 

@@ -1482,7 +1482,6 @@ struct peer_debug_info {
  * @wmi_cmd_rsp_wake_lock: wmi command response wake lock
  * @wmi_cmd_rsp_runtime_lock: wmi command response bus lock
  * @saved_chan: saved channel list sent as part of WMI_SCAN_CHAN_LIST_CMDID
- * @fw_mem_dump_enabled: Fw memory dump support
  * @ss_configs: spectral scan config parameters
  * @ito_repeat_count: Indicates ito repeated count
  */
@@ -1677,7 +1676,6 @@ typedef struct {
 	tp_wma_packetdump_cb wma_mgmt_rx_packetdump_cb;
 	bool rcpi_enabled;
 	tSirLLStatsResults *link_stats_results;
-	bool fw_mem_dump_enabled;
 	tSirAddonPsReq ps_setting;
 	struct peer_debug_info *peer_dbg;
 	bool auto_power_save_enabled;
@@ -1871,6 +1869,7 @@ struct wma_set_key_params {
 	uint32_t key_idx;
 	bool unicast;
 	uint8_t key_data[SIR_MAC_MAX_KEY_LENGTH];
+	uint8_t key_rsc[SIR_MAC_MAX_KEY_RSC_LEN];
 };
 
 /**

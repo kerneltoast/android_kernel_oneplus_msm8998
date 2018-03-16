@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -508,6 +508,12 @@ int wma_unified_bcntx_status_event_handler(void *handle,
 	resp_event = param_buf->fixed_param;
 
 	WMA_LOGD("%s", __func__);
+
+	if (resp_event->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: received invalid vdev_id %d",
+			 __func__, resp_event->vdev_id);
+		return -EINVAL;
+	}
 
 	/* Check for valid handle to ensure session is not
 	 * deleted in any race
@@ -1490,7 +1496,8 @@ static QDF_STATUS wma_setup_install_key_cmd(tp_wma_handle wma_handle,
 #endif
 	params.key_txmic_len = 0;
 	params.key_rxmic_len = 0;
-
+	qdf_mem_copy(&params.key_rsc_counter,
+		     &key_params->key_rsc[0], sizeof(uint64_t));
 	params.key_flags = 0;
 	if (key_params->unicast)
 		params.key_flags |= PAIRWISE_USAGE;
@@ -1620,6 +1627,9 @@ static QDF_STATUS wma_setup_install_key_cmd(tp_wma_handle wma_handle,
 	WMA_LOGD("unicast %d peer_mac %pM def_key_idx %d",
 		 key_params->unicast, key_params->peer_mac,
 		 key_params->def_key_idx);
+	WMA_LOGD("keyrsc param key_seq_counter_h:0x%x key_seq_counter_l: 0x%x",
+		params.key_rsc_counter.key_seq_counter_h,
+		params.key_rsc_counter.key_seq_counter_l);
 
 	status = wmi_unified_setup_install_key_cmd(wma_handle->wmi_handle,
 								&params);
@@ -1708,6 +1718,9 @@ void wma_set_bsskey(tp_wma_handle wma_handle, tpSetBssKeyParams key_info)
 			key_params.key_idx = key_info->key[i].keyId;
 
 		key_params.key_len = key_info->key[i].keyLength;
+		qdf_mem_copy(key_params.key_rsc,
+				key_info->key[i].keyRsc,
+				SIR_MAC_MAX_KEY_RSC_LEN);
 		if (key_info->encType == eSIR_ED_TKIP) {
 			qdf_mem_copy(key_params.key_data,
 				     key_info->key[i].key, 16);
@@ -2497,7 +2510,7 @@ void wma_send_beacon(tp_wma_handle wma, tpSendbeaconParams bcn_info)
 
 		if (bcn_info->p2pIeOffset) {
 			p2p_ie = bcn_info->beacon + bcn_info->p2pIeOffset;
-			WMA_LOGI("%s: p2pIe is present - vdev_id %hu, p2p_ie = %p, p2p ie len = %hu",
+			WMA_LOGI("%s: p2pIe is present - vdev_id %hu, p2p_ie = %pK, p2p ie len = %hu",
 				__func__, vdev_id, p2p_ie, p2p_ie[1]);
 			if (wma_p2p_go_set_beacon_ie(wma, vdev_id,
 							 p2p_ie) < 0) {
@@ -2601,6 +2614,10 @@ static int wma_process_mgmt_tx_completion(tp_wma_handle wma_handle,
 
 	if (pdev == NULL) {
 		WMA_LOGE("%s: NULL pdev pointer", __func__);
+		return -EINVAL;
+	}
+	if (desc_id >= WMI_DESC_POOL_MAX) {
+		WMA_LOGE("%s: Invalid desc id %d", __func__, desc_id);
 		return -EINVAL;
 	}
 
@@ -3370,11 +3387,17 @@ static int wma_mgmt_rx_process(void *handle, uint8_t *data,
 		WMA_LOGE("Rx event is NULL");
 		return -EINVAL;
 	}
-
-	if (hdr->buf_len < sizeof(struct ieee80211_frame)) {
+	if (hdr->buf_len > param_tlvs->num_bufp) {
+		WMA_LOGE("Invalid length of frame hdr->buf_len:%u, param_tlvs->num_bufp:%u",
+			hdr->buf_len, param_tlvs->num_bufp);
+		return -EINVAL;
+	}
+	if (hdr->buf_len < sizeof(struct ieee80211_frame) ||
+		hdr->buf_len > data_len) {
 		limit_prints_invalid_len++;
 		if (limit_prints_invalid_len == RATE_LIMIT) {
-			WMA_LOGD("Invalid rx mgmt packet");
+			WMA_LOGD("Invalid rx mgmt packet, data_len %u, hdr->buf_len %u",
+				data_len, hdr->buf_len);
 			limit_prints_invalid_len = 0;
 		}
 		return -EINVAL;

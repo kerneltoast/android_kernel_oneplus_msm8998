@@ -90,7 +90,6 @@
 #include "wlan_hdd_debugfs.h"
 #include "wlan_hdd_driver_ops.h"
 #include "epping_main.h"
-#include "wlan_hdd_memdump.h"
 
 #include <wlan_hdd_ipa.h>
 #include "hif.h"
@@ -1513,8 +1512,6 @@ void hdd_update_tgt_cfg(void *context, void *param)
 				hdd_ctx->config->bpf_packet_filter_enable);
 	hdd_ctx->rcpi_enabled = cfg->rcpi_enabled;
 	hdd_update_ra_rate_limit(hdd_ctx, cfg);
-
-	hdd_ctx->fw_mem_dump_enabled = cfg->fw_mem_dump_enabled;
 
 	/*
 	 * If BPF is enabled, maxWowFilters set to WMA_STA_WOW_DEFAULT_PTRN_MAX
@@ -5664,7 +5661,6 @@ void __hdd_wlan_exit(void)
 		return;
 	}
 
-	memdump_deinit();
 	hdd_driver_memdump_deinit();
 
 	/* Do all the cleanup before deregistering the driver */
@@ -9463,7 +9459,6 @@ int hdd_wlan_startup(struct device *dev)
 		goto err_close_adapters;
 
 	hdd_runtime_suspend_context_init(hdd_ctx);
-	memdump_init();
 	hdd_driver_memdump_init();
 
 	if (hdd_ctx->config->fIsImpsEnabled)
@@ -9649,13 +9644,6 @@ int hdd_register_cb(hdd_context_t *hdd_ctx)
 	sme_register_oem_data_rsp_callback(hdd_ctx->hHal,
 					hdd_send_oem_data_rsp_msg);
 
-	status = sme_fw_mem_dump_register_cb(hdd_ctx->hHal,
-					     wlan_hdd_cfg80211_fw_mem_dump_cb);
-	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		hdd_err("Failed to register memdump callback");
-		ret = -EINVAL;
-		return ret;
-	}
 	sme_register_mgmt_frame_ind_callback(hdd_ctx->hHal,
 					     hdd_indicate_mgmt_frame);
 	sme_set_tsfcb(hdd_ctx->hHal, hdd_get_tsf_cb, hdd_ctx);
@@ -9764,10 +9752,6 @@ void hdd_deregister_cb(hdd_context_t *hdd_ctx)
 	if (!QDF_IS_STATUS_SUCCESS(status))
 		hdd_err("Failed to de-register tsfcb the callback:%d",
 			status);
-	status = sme_fw_mem_dump_unregister_cb(hdd_ctx->hHal);
-	if (!QDF_IS_STATUS_SUCCESS(status))
-		hdd_err("Failed to de-register the fw mem dump callback: %d",
-			status);
 
 	sme_deregister_oem_data_rsp_callback(hdd_ctx->hHal);
 	sme_deregister11d_scan_done_callback(hdd_ctx->hHal);
@@ -9791,7 +9775,7 @@ QDF_STATUS hdd_softap_sta_deauth(hdd_adapter_t *adapter,
 
 	ENTER();
 
-	hdd_debug("hdd_softap_sta_deauth:(%p, false)",
+	hdd_debug("hdd_softap_sta_deauth:(%pK, false)",
 	       (WLAN_HDD_GET_CTX(adapter))->pcds_context);
 
 	/* Ignore request to deauth bcmc station */
@@ -9820,7 +9804,7 @@ void hdd_softap_sta_disassoc(hdd_adapter_t *adapter,
 {
 	ENTER();
 
-	hdd_debug("hdd_softap_sta_disassoc:(%p, false)",
+	hdd_debug("hdd_softap_sta_disassoc:(%pK, false)",
 	       (WLAN_HDD_GET_CTX(adapter))->pcds_context);
 
 	/* Ignore request to disassoc bcmc station */
@@ -9836,7 +9820,7 @@ void hdd_softap_tkip_mic_fail_counter_measure(hdd_adapter_t *adapter,
 {
 	ENTER();
 
-	hdd_debug("hdd_softap_tkip_mic_fail_counter_measure:(%p, false)",
+	hdd_debug("hdd_softap_tkip_mic_fail_counter_measure:(%pK, false)",
 	       (WLAN_HDD_GET_CTX(adapter))->pcds_context);
 
 	wlansap_set_counter_measure(WLAN_HDD_GET_SAP_CTX_PTR(adapter),

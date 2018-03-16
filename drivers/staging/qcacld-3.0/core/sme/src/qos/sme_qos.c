@@ -1280,7 +1280,7 @@ static sme_QosStatusType sme_qos_internal_setup_req(tpAniSirGlobal pMac,
 			pentry->tspec_mask = pACInfo->tspec_mask_status;
 			pentry->QoSInfo = Tspec_Info;
 			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-				  "%s: %d: Creating entry on session %d at %p with flowID %d",
+				  "%s: %d: Creating entry on session %d at %pK with flowID %d",
 				  __func__, __LINE__,
 				  sessionId, pentry, QosFlowID);
 			csr_ll_insert_tail(&sme_qos_cb.flow_list, &pentry->link,
@@ -1664,7 +1664,7 @@ static sme_QosStatusType sme_qos_internal_setup_req(tpAniSirGlobal pMac,
 			pentry->tspec_mask = tmask;
 			pentry->QoSInfo = Tspec_Info;
 			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-				  "%s: %d: On session %d creating entry at %p with flowID %d",
+				  "%s: %d: On session %d creating entry at %pK with flowID %d",
 				  __func__, __LINE__,
 				  sessionId, pentry, QosFlowID);
 			csr_ll_insert_tail(&sme_qos_cb.flow_list, &pentry->link,
@@ -1887,7 +1887,7 @@ static sme_QosStatusType sme_qos_internal_modify_req(tpAniSirGlobal pMac,
 		 */
 		flow_info->reason = SME_QOS_REASON_MODIFY;
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-			  "%s: %d: On session %d creating modified entry at %p with flowID %d",
+			  "%s: %d: On session %d creating modified entry at %pK with flowID %d",
 			  __func__, __LINE__,
 			  sessionId, pNewEntry, pNewEntry->QosFlowID);
 		/* add the new entry under construction to the Flow List */
@@ -2393,7 +2393,7 @@ static sme_QosStatusType sme_qos_internal_release_req(tpAniSirGlobal pMac,
 					/* delete the entry from Flow List */
 					QDF_TRACE(QDF_MODULE_ID_SME,
 						  QDF_TRACE_LEVEL_DEBUG,
-						  "%s: %d: Deleting entry at %p with flowID %d",
+						  "%s: %d: Deleting entry at %pK with flowID %d",
 						  __func__, __LINE__, flow_info,
 						  QosFlowID);
 					csr_ll_remove_entry(&sme_qos_cb.
@@ -2456,7 +2456,7 @@ static sme_QosStatusType sme_qos_internal_release_req(tpAniSirGlobal pMac,
 					/* delete the entry from Flow List */
 					QDF_TRACE(QDF_MODULE_ID_SME,
 						  QDF_TRACE_LEVEL_DEBUG,
-						  "%s: %d: On session %d deleting entry at %p with flowID %d",
+						  "%s: %d: On session %d deleting entry at %pK with flowID %d",
 						__func__, __LINE__, sessionId,
 						  flow_info, QosFlowID);
 					csr_ll_remove_entry(&sme_qos_cb.
@@ -2652,7 +2652,7 @@ static sme_QosStatusType sme_qos_internal_release_req(tpAniSirGlobal pMac,
 
 				QDF_TRACE(QDF_MODULE_ID_SME,
 					  QDF_TRACE_LEVEL_DEBUG,
-					  "%s: %d: Deleting entry at %p with flowID %d",
+					  "%s: %d: Deleting entry at %pK with flowID %d",
 					  __func__, __LINE__, flow_info,
 					  flow_info->QosFlowID);
 			} else if (buffered_cmd) {
@@ -2700,7 +2700,7 @@ static sme_QosStatusType sme_qos_internal_release_req(tpAniSirGlobal pMac,
 			pACInfo->num_flows[flow_info->tspec_mask - 1]--;
 			/* delete the entry from Flow List */
 			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-				  "%s: %d: On session %d deleting entry at %p with flowID %d",
+				  "%s: %d: On session %d deleting entry at %pK with flowID %d",
 				  __func__, __LINE__,
 				  sessionId, flow_info, QosFlowID);
 			csr_ll_remove_entry(&sme_qos_cb.flow_list, pEntry,
@@ -3128,7 +3128,7 @@ QDF_STATUS sme_qos_ese_process_reassoc_tspec_rsp(tpAniSirGlobal pMac,
 	}
 
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_WARN,
-		  "TspecLen = %d, pbFrames = %p, pTspecIE = %p",
+		  "TspecLen = %d, pbFrames = %pK, pTspecIE = %pK",
 		  tspecIeLen, pCsrConnectedInfo->pbFrames, pTspecIE);
 
 	numTspec = (tspecIeLen) / sizeof(tDot11fIEWMMTSPEC);
@@ -6382,7 +6382,7 @@ static QDF_STATUS sme_qos_buffer_existing_flows(tpAniSirGlobal mac_ctx,
 		}
 		/* delete the entry from Flow List */
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-			  FL("Deleting original entry at %p with flowID %d"),
+			  FL("Deleting original entry at %pK with flowID %d"),
 			  flow_info, flow_info->QosFlowID);
 		csr_ll_remove_entry(&sme_qos_cb.flow_list, list_entry, true);
 		qdf_mem_free(flow_info);
@@ -6429,7 +6429,7 @@ static QDF_STATUS sme_qos_delete_existing_flows(tpAniSirGlobal pMac,
 						       flow_info->QosFlowID);
 			}
 			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-				  "%s: %d: Deleting entry at %p with flowID %d",
+				  "%s: %d: Deleting entry at %pK with flowID %d",
 				  __func__, __LINE__,
 				  flow_info, flow_info->QosFlowID);
 			/* delete the entry from Flow List */
@@ -6803,7 +6803,7 @@ static QDF_STATUS sme_qos_modify_fnp(tpAniSirGlobal pMac, tListElem *pEntry)
 	case SME_QOS_REASON_MODIFY:
 		/* delete the original entry from Flow List */
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-			  "%s: %d: Deleting original entry at %p with flowID %d",
+			  "%s: %d: Deleting original entry at %pK with flowID %d",
 			  __func__, __LINE__, flow_info, flow_info->QosFlowID);
 		csr_ll_remove_entry(&sme_qos_cb.flow_list, pEntry, true);
 		/* reclaim the memory */
@@ -6991,7 +6991,7 @@ sme_qos_reassoc_success_ev_fnp(tpAniSirGlobal mac_ctx,
 	} else {
 		/* delete the entry from Flow List */
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-			FL("Deleting entry at %p with flowID %d"),
+			FL("Deleting entry at %pK with flowID %d"),
 			flow_info, flow_info->QosFlowID);
 		csr_ll_remove_entry(&sme_qos_cb.flow_list, entry, true);
 		/* reclaim the memory */
@@ -7077,7 +7077,7 @@ static QDF_STATUS sme_qos_add_ts_failure_fnp(tpAniSirGlobal pMac, tListElem
 		}
 		/* delete the entry from Flow List */
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-			  "%s: %d: Deleting entry at %p with flowID %d",
+			  "%s: %d: Deleting entry at %pK with flowID %d",
 			  __func__, __LINE__, flow_info, flow_info->QosFlowID);
 		csr_ll_remove_entry(&sme_qos_cb.flow_list, pEntry, true);
 		/* reclaim the memory */
@@ -7258,7 +7258,7 @@ static QDF_STATUS sme_qos_add_ts_success_fnp(tpAniSirGlobal mac_ctx,
 	}
 	if (delete_entry) {
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-			FL("Deleting entry at %p with flowID %d"),
+			FL("Deleting entry at %pK with flowID %d"),
 			flow_info, flow_info->QosFlowID);
 		/* delete the entry from Flow List */
 		csr_ll_remove_entry(&sme_qos_cb.flow_list, entry, true);

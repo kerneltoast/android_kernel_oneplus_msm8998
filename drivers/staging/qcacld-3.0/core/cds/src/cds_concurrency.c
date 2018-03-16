@@ -2826,7 +2826,7 @@ bool cds_is_connection_in_progress(uint8_t *session_id,
 			&& (eConnectionState_Connecting ==
 				(WLAN_HDD_GET_STATION_CTX_PTR(adapter))->
 					conn_info.connState)) {
-			cds_err("%p(%d) Connection is in progress",
+			cds_err("%pK(%d) Connection is in progress",
 				WLAN_HDD_GET_STATION_CTX_PTR(adapter),
 				adapter->sessionId);
 			if (session_id && reason) {
@@ -2844,7 +2844,7 @@ bool cds_is_connection_in_progress(uint8_t *session_id,
 					WLAN_HDD_GET_HAL_CTX(adapter),
 					adapter->sessionId)) ||
 				hdd_is_roaming_in_progress(adapter)) {
-			cds_err("%p(%d) Reassociation in progress",
+			cds_err("%pK(%d) Reassociation in progress",
 				WLAN_HDD_GET_STATION_CTX_PTR(adapter),
 				adapter->sessionId);
 			if (session_id && reason) {

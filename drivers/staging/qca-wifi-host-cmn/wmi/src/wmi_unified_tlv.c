@@ -3482,8 +3482,8 @@ QDF_STATUS send_set_sta_keep_alive_cmd_tlv(wmi_unified_t wmi_handle,
 		if ((NULL == params->hostv4addr) ||
 			(NULL == params->destv4addr) ||
 			(NULL == params->destmac)) {
-			WMI_LOGE("%s: received null pointer, hostv4addr:%p "
-			   "destv4addr:%p destmac:%p ", __func__,
+			WMI_LOGE("%s: received null pointer, hostv4addr:%pK "
+			   "destv4addr:%pK destmac:%pK ", __func__,
 			   params->hostv4addr, params->destv4addr, params->destmac);
 			wmi_buf_free(buf);
 			return QDF_STATUS_E_FAILURE;
@@ -3786,6 +3786,8 @@ QDF_STATUS send_setup_install_key_cmd_tlv(wmi_unified_t wmi_handle,
 	key_data = (A_UINT8 *) (buf_ptr + WMI_TLV_HDR_SIZE);
 	qdf_mem_copy((void *)key_data,
 		     (const void *)key_params->key_data, key_params->key_len);
+	qdf_mem_copy(&cmd->key_rsc_counter, &key_params->key_rsc_counter,
+		     sizeof(wmi_key_seq_counter));
 	cmd->key_len = key_params->key_len;
 
 	status = wmi_unified_cmd_send(wmi_handle, buf, len,
@@ -9464,99 +9466,6 @@ QDF_STATUS send_update_tdls_peer_state_cmd_tlv(wmi_unified_t wmi_handle,
 }
 
 /*
- * send_process_fw_mem_dump_cmd_tlv() - Function to request fw memory dump from
- * firmware
- * @wmi_handle:         Pointer to wmi handle
- * @mem_dump_req:       Pointer for mem_dump_req
- *
- * This function sends memory dump request to firmware
- *
- * Return: QDF_STATUS_SUCCESS for success otherwise failure
- *
- */
-QDF_STATUS send_process_fw_mem_dump_cmd_tlv(wmi_unified_t wmi_handle,
-					struct fw_dump_req_param *mem_dump_req)
-{
-	wmi_get_fw_mem_dump_fixed_param *cmd;
-	wmi_fw_mem_dump *dump_params;
-	struct wmi_fw_dump_seg_req *seg_req;
-	int32_t len;
-	wmi_buf_t buf;
-	u_int8_t *buf_ptr;
-	int ret, loop;
-
-	/*
-	 * len = sizeof(fixed param) that includes tlv header +
-	 *       tlv header for array of struc +
-	 *       sizeof (each struct)
-	 */
-	len = sizeof(*cmd) + WMI_TLV_HDR_SIZE;
-	len += mem_dump_req->num_seg * sizeof(wmi_fw_mem_dump);
-	buf = wmi_buf_alloc(wmi_handle, len);
-
-	if (!buf) {
-		WMI_LOGE(FL("Failed allocate wmi buffer"));
-		return QDF_STATUS_E_NOMEM;
-	}
-
-	buf_ptr = (u_int8_t *) wmi_buf_data(buf);
-	qdf_mem_zero(buf_ptr, len);
-	cmd = (wmi_get_fw_mem_dump_fixed_param *) buf_ptr;
-
-	WMITLV_SET_HDR(&cmd->tlv_header,
-		WMITLV_TAG_STRUC_wmi_get_fw_mem_dump_fixed_param,
-		WMITLV_GET_STRUCT_TLVLEN(wmi_get_fw_mem_dump_fixed_param));
-
-	cmd->request_id = mem_dump_req->request_id;
-	cmd->num_fw_mem_dump_segs = mem_dump_req->num_seg;
-
-	/* TLV indicating array of structures to follow */
-	buf_ptr += sizeof(wmi_get_fw_mem_dump_fixed_param);
-	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
-		       sizeof(wmi_fw_mem_dump) *
-		       cmd->num_fw_mem_dump_segs);
-
-	buf_ptr += WMI_TLV_HDR_SIZE;
-	dump_params = (wmi_fw_mem_dump *) buf_ptr;
-
-	WMI_LOGI(FL("request_id:%d num_seg:%d"),
-		    mem_dump_req->request_id, mem_dump_req->num_seg);
-	for (loop = 0; loop < cmd->num_fw_mem_dump_segs; loop++) {
-		seg_req = (struct wmi_fw_dump_seg_req *)
-			  ((uint8_t *)(mem_dump_req->segment) +
-			    loop * sizeof(*seg_req));
-		WMITLV_SET_HDR(&dump_params->tlv_header,
-			    WMITLV_TAG_STRUC_wmi_fw_mem_dump_params,
-			    WMITLV_GET_STRUCT_TLVLEN(wmi_fw_mem_dump));
-		dump_params->seg_id = seg_req->seg_id;
-		dump_params->seg_start_addr_lo = seg_req->seg_start_addr_lo;
-		dump_params->seg_start_addr_hi = seg_req->seg_start_addr_hi;
-		dump_params->seg_length = seg_req->seg_length;
-		dump_params->dest_addr_lo = seg_req->dst_addr_lo;
-		dump_params->dest_addr_hi = seg_req->dst_addr_hi;
-		WMI_LOGI(FL("seg_number:%d"), loop);
-		WMI_LOGI(FL("seg_id:%d start_addr_lo:0x%x start_addr_hi:0x%x"),
-			 dump_params->seg_id, dump_params->seg_start_addr_lo,
-			 dump_params->seg_start_addr_hi);
-		WMI_LOGI(FL("seg_length:%d dst_addr_lo:0x%x dst_addr_hi:0x%x"),
-			 dump_params->seg_length, dump_params->dest_addr_lo,
-			 dump_params->dest_addr_hi);
-		dump_params++;
-	}
-
-	ret = wmi_unified_cmd_send(wmi_handle, buf, len,
-				   WMI_GET_FW_MEM_DUMP_CMDID);
-	if (ret) {
-		WMI_LOGE(FL("Failed to send get firmware mem dump request"));
-		wmi_buf_free(buf);
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	WMI_LOGI(FL("Get firmware mem dump request sent successfully"));
-	return QDF_STATUS_SUCCESS;
-}
-
-/*
  * send_process_set_ie_info_cmd_tlv() - Function to send IE info to firmware
  * @wmi_handle:    Pointer to WMi handle
  * @ie_data:       Pointer for ie data
@@ -9976,8 +9885,8 @@ QDF_STATUS send_set_base_macaddr_indicate_cmd_tlv(wmi_unified_t wmi_handle,
  * Return: 0 on successfully enabling/disabling the events
  */
 QDF_STATUS send_log_supported_evt_cmd_tlv(wmi_unified_t wmi_handle,
-		uint8_t *event,
-		uint32_t len)
+					  uint8_t *event,
+					  uint32_t len)
 {
 	uint32_t num_of_diag_events_logs;
 	wmi_diag_event_log_config_fixed_param *cmd;
@@ -9998,6 +9907,15 @@ QDF_STATUS send_log_supported_evt_cmd_tlv(wmi_unified_t wmi_handle,
 	}
 	wmi_event = param_buf->fixed_param;
 	num_of_diag_events_logs = wmi_event->num_of_diag_events_logs;
+
+	if (num_of_diag_events_logs >
+	    param_buf->num_diag_events_logs_list) {
+		WMI_LOGE("message number of events %d is more than tlv hdr content %d",
+			 num_of_diag_events_logs,
+			 param_buf->num_diag_events_logs_list);
+		return QDF_STATUS_E_INVAL;
+	}
+
 	evt_args = param_buf->diag_events_logs_list;
 	if (!evt_args) {
 		WMI_LOGE("%s: Event list is empty, num_of_diag_events_logs=%d",
@@ -13312,7 +13230,6 @@ struct wmi_ops tlv_ops =  {
 	.send_set_tdls_offchan_mode_cmd = send_set_tdls_offchan_mode_cmd_tlv,
 	.send_update_fw_tdls_state_cmd = send_update_fw_tdls_state_cmd_tlv,
 	.send_update_tdls_peer_state_cmd = send_update_tdls_peer_state_cmd_tlv,
-	.send_process_fw_mem_dump_cmd = send_process_fw_mem_dump_cmd_tlv,
 	.send_process_set_ie_info_cmd = send_process_set_ie_info_cmd_tlv,
 #ifdef CONFIG_MCL
 	.send_init_cmd = send_init_cmd_tlv,
@@ -13623,8 +13540,6 @@ static void populate_tlv_events_id(uint32_t *event_ids)
 	event_ids[wmi_iface_link_stats_event_id] = WMI_IFACE_LINK_STATS_EVENTID;
 	event_ids[wmi_peer_link_stats_event_id] = WMI_PEER_LINK_STATS_EVENTID;
 	event_ids[wmi_radio_link_stats_link] = WMI_RADIO_LINK_STATS_EVENTID;
-	event_ids[wmi_update_fw_mem_dump_event_id] =
-				WMI_UPDATE_FW_MEM_DUMP_EVENTID;
 	event_ids[wmi_diag_event_id_log_supported_event_id] =
 				WMI_DIAG_EVENT_LOG_SUPPORTED_EVENTID;
 	event_ids[wmi_nlo_match_event_id] = WMI_NLO_MATCH_EVENTID;

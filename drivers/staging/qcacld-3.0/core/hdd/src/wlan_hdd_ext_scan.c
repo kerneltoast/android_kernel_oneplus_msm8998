@@ -1347,7 +1347,7 @@ wlan_hdd_cfg80211_extscan_generic_rsp
 	ENTER();
 
 	if (wlan_hdd_validate_context(hdd_ctx) || !response) {
-		hdd_err("HDD context is not valid or response(%p) is null",
+		hdd_err("HDD context is not valid or response(%pK) is null",
 		       response);
 		return;
 	}
@@ -1670,14 +1670,14 @@ static int __wlan_hdd_cfg80211_extscan_get_capabilities(struct wiphy *wiphy,
 	}
 
 	/* Parse and fetch request Id */
-	if (!tb[QCA_WLAN_VENDOR_ATTR_PNO_CONFIG_REQUEST_ID]) {
+	if (!tb[QCA_WLAN_VENDOR_ATTR_EXTSCAN_SUBCMD_CONFIG_PARAM_REQUEST_ID]) {
 		hdd_err("attr request id failed");
 		goto fail;
 	}
 
 	pReqMsg->requestId =
 		nla_get_u32(tb
-		 [QCA_WLAN_VENDOR_ATTR_PNO_CONFIG_REQUEST_ID]);
+		 [QCA_WLAN_VENDOR_ATTR_EXTSCAN_SUBCMD_CONFIG_PARAM_REQUEST_ID]);
 	pReqMsg->sessionId = pAdapter->sessionId;
 	hdd_debug("Req Id %d Session Id %d",
 		pReqMsg->requestId, pReqMsg->sessionId);
@@ -3888,12 +3888,12 @@ static int __wlan_hdd_cfg80211_set_epno_list(struct wiphy *wiphy,
 	req_msg->num_networks = num_networks;
 
 	/* Parse and fetch request Id */
-	if (!tb[QCA_WLAN_VENDOR_ATTR_EXTSCAN_SUBCMD_CONFIG_PARAM_REQUEST_ID]) {
+	if (!tb[QCA_WLAN_VENDOR_ATTR_PNO_CONFIG_REQUEST_ID]) {
 		hdd_err("attr request id failed");
 		goto fail;
 	}
 	req_msg->request_id = nla_get_u32(
-	    tb[QCA_WLAN_VENDOR_ATTR_EXTSCAN_SUBCMD_CONFIG_PARAM_REQUEST_ID]);
+	    tb[QCA_WLAN_VENDOR_ATTR_PNO_CONFIG_REQUEST_ID]);
 	hdd_debug("Req Id %u", req_msg->request_id);
 
 	req_msg->session_id = adapter->sessionId;

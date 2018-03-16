@@ -1017,7 +1017,7 @@ static void wlan_hdd_remain_on_chan_timeout(void *data)
 
 	if ((NULL == pAdapter) ||
 	    (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic)) {
-		hdd_err("pAdapter is invalid %p !!!", pAdapter);
+		hdd_err("pAdapter is invalid %pK !!!", pAdapter);
 		return;
 	}
 
@@ -1147,7 +1147,7 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
 			mutex_lock(&cfgState->remain_on_chan_ctx_lock);
 			pAdapter->is_roc_inprogress = false;
 			pRemainChanCtx = cfgState->remain_on_chan_ctx;
-			hdd_debug("Freeing ROC ctx cfgState->remain_on_chan_ctx=%p",
+			hdd_debug("Freeing ROC ctx cfgState->remain_on_chan_ctx=%pK",
 				 cfgState->remain_on_chan_ctx);
 			if (pRemainChanCtx) {
 				if (qdf_mc_timer_destroy(
@@ -1164,9 +1164,11 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
 			hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_ROC);
 			return -EINVAL;
 		}
-
-		if (REMAIN_ON_CHANNEL_REQUEST ==
-		    pRemainChanCtx->rem_on_chan_request) {
+		mutex_lock(&cfgState->remain_on_chan_ctx_lock);
+		pRemainChanCtx = cfgState->remain_on_chan_ctx;
+		if (pRemainChanCtx) {
+		    if (REMAIN_ON_CHANNEL_REQUEST ==
+			pRemainChanCtx->rem_on_chan_request) {
 			if (QDF_STATUS_SUCCESS != sme_register_mgmt_frame(
 						WLAN_HDD_GET_HAL_CTX(pAdapter),
 						sessionId,
@@ -1174,8 +1176,9 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
 						(SIR_MAC_MGMT_PROBE_REQ << 4),
 						NULL, 0))
 				hdd_err("sme_register_mgmt_frame failed");
+			}
 		}
-
+		mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
 	} else if ((QDF_SAP_MODE == pAdapter->device_mode) ||
 		   (QDF_P2P_GO_MODE == pAdapter->device_mode)) {
 		/* call sme API to start remain on channel. */
@@ -1188,7 +1191,7 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
 			mutex_lock(&cfgState->remain_on_chan_ctx_lock);
 			pAdapter->is_roc_inprogress = false;
 			pRemainChanCtx = cfgState->remain_on_chan_ctx;
-			hdd_debug("Freeing ROC ctx cfgState->remain_on_chan_ctx=%p",
+			hdd_debug("Freeing ROC ctx cfgState->remain_on_chan_ctx=%pK",
 				 cfgState->remain_on_chan_ctx);
 			if (pRemainChanCtx) {
 				if (qdf_mc_timer_destroy(
@@ -1415,7 +1418,7 @@ static int wlan_hdd_request_remain_on_channel(struct wiphy *wiphy,
 			schedule_delayed_work(&pHddCtx->roc_req_work,
 			msecs_to_jiffies(
 				pHddCtx->config->p2p_listen_defer_interval));
-			hdd_debug("Defer interval is %hu, pAdapter %p",
+			hdd_debug("Defer interval is %hu, pAdapter %pK",
 				pHddCtx->config->p2p_listen_defer_interval,
 				pAdapter);
 			return 0;
