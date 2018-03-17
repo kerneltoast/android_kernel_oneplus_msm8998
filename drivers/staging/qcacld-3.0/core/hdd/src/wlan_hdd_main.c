@@ -11399,7 +11399,7 @@ int hdd_get_rssi_snr_by_bssid(hdd_adapter_t *adapter, const uint8_t *bssid,
 module_init(hdd_module_init);
 module_exit(hdd_module_exit);
 #else
-late_initcall(hdd_module_init);
+device_initcall(hdd_module_init);
 #endif
 
 MODULE_LICENSE("Dual BSD/GPL");
